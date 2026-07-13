@@ -9,6 +9,7 @@ import { createCodecs, serializeSession, deserializeSession } from '../systems/c
 import { createCommandBus, registerCommand } from '../systems/commands.js';
 import { createEventQueue } from '../systems/events.js';
 import { createOffline } from '../systems/automation.js';
+import { toNumber } from '../systems/decimal.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -62,7 +63,13 @@ function registerDefaultCommands() {
     const sold = session.grid.currentPower;
     if (sold <= 0) return false;
     session.grid.currentPower = 0;
-    session.systems.economy?.addMoney(sold);
+    const overrides = session.mechanicsOverrides || {};
+    const sellPriceMultiplier = toNumber(overrides.sellPriceMultiplier) || 1;
+    const economy = session.systems.economy;
+    const prestige = economy?.getPrestigeMultiplier?.() ?? 1;
+    const income = sold * prestige * sellPriceMultiplier;
+    economy?.addMoney(income);
+    economy?.recordManualPowerSold?.(sold);
     session.events?.emit('sellPower', { amount: sold });
     return sold;
   });
