@@ -1,0 +1,398 @@
+{
+  "general": [
+    {
+      "id": "chronometer",
+      "title": "Improved Chronometers",
+      "description": "+1 tick per second per level.",
+      "cost": 10000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "loop_wait = base_loop_wait / (level + 1)"
+    },
+    {
+      "id": "forceful_fusion",
+      "title": "Forceful Fusion",
+      "description": "Cells produce 1% more power at 1k heat, 2% at 2m heat, etc. per level.",
+      "cost": 10000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "power *= 1 + (level * log10(heat) / log10(1000) / 100) when heat > 1000"
+    },
+    {
+      "id": "heat_control_operator",
+      "title": "Heat Control Operator",
+      "description": "Reactor no longer auto-removes heat when below max. Makes Forceful Fusion easier.",
+      "cost": 1000000,
+      "levels": 1
+    },
+    {
+      "id": "heat_outlet_control_operator",
+      "title": "Better Heat Control Operator",
+      "description": "Outlets no longer output more heat than connected vents can handle.",
+      "erequires": "heat_control_operator",
+      "cost": 10000000,
+      "levels": 1
+    },
+    {
+      "id": "improved_piping",
+      "title": "Improved Piping",
+      "description": "Manual venting is 10x more effective per level.",
+      "cost": 100,
+      "multiplier": 20,
+      "maxLevel": 32,
+      "effect": "manual_heat_reduce = base * 10^level"
+    },
+    {
+      "id": "improved_alloys",
+      "title": "Improved Alloys",
+      "description": "Plating holds +100% more heat per level.",
+      "cost": 5000,
+      "multiplier": 5,
+      "maxLevel": 32,
+      "effect": "plating.reactor_heat = base * (level + 1) * 2^quantum_buffering_level"
+    }
+  ],
+  "capacitor": [
+    {
+      "id": "improved_power_lines",
+      "title": "Improved Power Lines",
+      "description": "Auto-sell 1% of power per tick per level.",
+      "cost": 100,
+      "multiplier": 10,
+      "maxLevel": 32,
+      "effect": "auto_sell_multiplier = 0.01 * level"
+    },
+    {
+      "id": "improved_wiring",
+      "title": "Improved Wiring",
+      "description": "Capacitors +100% power and heat per level.",
+      "cost": 5000,
+      "multiplier": 5,
+      "maxLevel": 32,
+      "effect": "capacitor.reactor_power = base * (level + 1) * 2^quantum_buffering_level"
+    },
+    {
+      "id": "perpetual_capacitors",
+      "title": "Perpetual Capacitors",
+      "description": "Auto-replace capacitors on cool surface when they overheat. Costs 10x normal.",
+      "cost": 1000000000000000000,
+      "levels": 1
+    },
+    {
+      "id": "improved_coolant_cells",
+      "title": "Improved Coolant Cells",
+      "description": "Coolant cells +100% heat capacity per level.",
+      "cost": 5000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "coolant.containment = base * (level + 1) * 2^ultracryonics_level"
+    }
+  ],
+  "reflector": [
+    {
+      "id": "improved_reflector_density",
+      "title": "Improved Reflector Density",
+      "description": "Reflectors last +100% longer per level.",
+      "cost": 5000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "reflector.ticks = base * (level + 1)"
+    },
+    {
+      "id": "improved_neutron_reflection",
+      "title": "Improved Neutron Reflection",
+      "description": "Reflectors +1% power reflection per level.",
+      "cost": 5000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "power_increase = base * (1 + level/100) + base * full_spectrum_level"
+    },
+    {
+      "id": "perpetual_reflectors",
+      "title": "Perpetual Reflectors",
+      "description": "Auto-replace reflectors on cool surface. Costs 1.5x normal.",
+      "cost": 1000000000,
+      "levels": 1
+    }
+  ],
+  "exchanger": [
+    {
+      "id": "improved_heat_exchangers",
+      "title": "Improved Heat Exchangers",
+      "description": "Exchangers, inlets, outlets +100% hold and exchange per level.",
+      "cost": 600,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "transfer = base * (level + 1) * 2^fluid_hyperdynamics_level; containment = base * (level + 1) * 2^fractal_piping_level"
+    },
+    {
+      "id": "reinforced_heat_exchangers",
+      "title": "Reinforced Heat Exchangers",
+      "description": "Each plating +1% exchanger transfer per level per plating level.",
+      "cost": 1000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "transfer_plating_multiplier = level"
+    },
+    {
+      "id": "active_exchangers",
+      "title": "Active Exchangers",
+      "description": "Each capacitor +1% exchanger transfer per level per capacitor level.",
+      "cost": 1000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "transfer_capacitor_multiplier = level"
+    }
+  ],
+  "vent": [
+    {
+      "id": "improved_heat_vents",
+      "title": "Improved Heat Vents",
+      "description": "Vents +100% vent and hold per level.",
+      "cost": 250,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "vent = base * (level + 1) * 2^fluid_hyperdynamics_level; containment = base * (level + 1) * 2^fractal_piping_level"
+    },
+    {
+      "id": "improved_heatsinks",
+      "title": "Improved Heatsinks",
+      "description": "Each plating +1% vent capacity per level per plating level.",
+      "cost": 1000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "vent_plating_multiplier = level"
+    },
+    {
+      "id": "active_venting",
+      "title": "Active Venting",
+      "description": "Each capacitor +1% vent effectiveness per level per capacitor level.",
+      "cost": 1000,
+      "multiplier": 100,
+      "maxLevel": 32,
+      "effect": "vent_capacitor_multiplier = level"
+    }
+  ],
+  "expansion": [
+    {
+      "id": "expand_reactor_rows",
+      "title": "Expand Reactor Rows",
+      "description": "+1 row per level.",
+      "cost": 100,
+      "multiplier": 100,
+      "maxLevel": 20,
+      "effect": "rows = base_rows + level"
+    },
+    {
+      "id": "expand_reactor_cols",
+      "title": "Expand Reactor Cols",
+      "description": "+1 column per level.",
+      "cost": 100,
+      "multiplier": 100,
+      "maxLevel": 20,
+      "effect": "cols = base_cols + level"
+    }
+  ],
+  "experimental": [
+    {
+      "id": "laboratory",
+      "title": "Laboratory",
+      "description": "Enables experimental upgrades.",
+      "ecost": 1,
+      "levels": 1
+    },
+    {
+      "id": "infused_cells",
+      "title": "Infused Cells",
+      "description": "Each fuel cell +100% base power per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "base_power *= (level + infused_level + 1) * 2^unleashed_level"
+    },
+    {
+      "id": "unleashed_cells",
+      "title": "Unleashed Cells",
+      "description": "Each fuel cell 2x base heat and power per level.",
+      "erequires": "laboratory",
+      "ecost": 100,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "cell.base_heat *= 2^level; cell.power *= 2^level"
+    },
+    {
+      "id": "quantum_buffering",
+      "title": "Quantum Buffering",
+      "description": "Capacitors and platings 2x reactor power/heat capacity per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "capacitor.reactor_power *= 2^level; capacitor.containment *= 2^level; plating.reactor_heat *= 2^level"
+    },
+    {
+      "id": "full_spectrum_reflectors",
+      "title": "Full Spectrum Reflectors",
+      "description": "Reflectors +100% base power reflection per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "power_increase = base * (1 + improved_level/100) + base * level"
+    },
+    {
+      "id": "fluid_hyperdynamics",
+      "title": "Fluid Hyperdynamics",
+      "description": "Vents, exchangers, inlets, outlets 2x effective per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "transfer/vent *= 2^level"
+    },
+    {
+      "id": "fractal_piping",
+      "title": "Fractal Piping",
+      "description": "Vents and exchangers 2x base heat hold per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "vent/exchanger containment *= 2^level"
+    },
+    {
+      "id": "ultracryonics",
+      "title": "Ultracryonics",
+      "description": "Coolant cells 2x base heat hold per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "coolant.containment *= 2^level"
+    },
+    {
+      "id": "phlembotinum_core",
+      "title": "Phlembotinum Core",
+      "description": "Reactor base heat and power 4x per level.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "altered_max_power = base_max_power * 4^level; altered_max_heat = base_max_heat * 4^level"
+    },
+    {
+      "id": "protium_cells",
+      "title": "Protium Cells",
+      "description": "Unlocks Protium Cells.",
+      "erequires": "laboratory",
+      "ecost": 50,
+      "levels": 1
+    },
+    {
+      "id": "unstable_protium",
+      "title": "Unstable Protium",
+      "description": "Protium lasts half as long, 2x power and heat per level.",
+      "erequires": "protium_cells",
+      "ecost": 500,
+      "multiplier": 2,
+      "maxLevel": 32,
+      "effect": "protium.ticks = ceil(base / 2^level); protium.heat *= 2^level"
+    }
+  ],
+  "experimentalParts": [
+    {
+      "id": "heat_reflection",
+      "title": "Heat Reflection",
+      "description": "Unlocks Thermal Neutron Reflector.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "experimental_capacitance",
+      "title": "Experimental Capacitance",
+      "description": "Unlocks Extreme Capacitor.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "vortex_cooling",
+      "title": "Vortex Cooling",
+      "description": "Unlocks Extreme Vent.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "underground_heat_extraction",
+      "title": "Underground Heat Extraction",
+      "description": "Unlocks Extreme Heat Exchanger.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "vortex_extraction",
+      "title": "Vortex Extraction",
+      "description": "Unlocks Extreme Heat Inlet.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "explosive_ejection",
+      "title": "Explosive Ejection",
+      "description": "Unlocks Extreme Heat Outlet.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "thermionic_conversion",
+      "title": "Thermionic Conversion",
+      "description": "Unlocks Thermionic Coolant Cell.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "micro_capacitance",
+      "title": "Micro Capacitance",
+      "description": "Unlocks Charged Reactor Plating.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    },
+    {
+      "id": "singularity_harnessing",
+      "title": "Singularity Harnessing",
+      "description": "Unlocks Black Hole Particle Accelerator.",
+      "erequires": "laboratory",
+      "ecost": 10000,
+      "levels": 1
+    }
+  ],
+  "perFuelType": [
+    {
+      "type": "cell_power",
+      "titlePrefix": "Potent ",
+      "descriptionSuffix": " cells produce +100% power per level.",
+      "effect": "base_power *= (level + infused_level + 1) * 2^unleashed_level"
+    },
+    {
+      "type": "cell_tick",
+      "titlePrefix": "Enriched ",
+      "descriptionSuffix": " cells last 2x as long per level.",
+      "effect": "ticks = base * 2^level"
+    },
+    {
+      "type": "cell_perpetual",
+      "titlePrefix": "Perpetual ",
+      "descriptionSuffix": " cells auto-replace when depleted. Costs 1.5x.",
+      "levels": 1,
+      "effect": "auto-replace on depletion"
+    }
+  ]
+}

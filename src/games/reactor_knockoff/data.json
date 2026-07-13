@@ -1,0 +1,165 @@
+{
+  "id": "reactor_knockoff",
+  "name": "Reactor Knockoff",
+  "description": "Reactor Knockoff (cwmonkey HTML5 remake) reactor simulation.",
+  "source": {
+    "name": "reactor-knockoff",
+    "author": "cwmonkey",
+    "reference": "https://github.com/cwmonkey/reactor-knockoff",
+    "originalGame": "Reactor Incremental by Cael (Kongregate)"
+  },
+  "version": "1.3.2",
+  "tickRate": 1000,
+  "tickRateMs": 1000,
+  "tickRateUpgradable": true,
+  "baseTicksPerSecond": 1,
+  "gridDefaults": {
+    "rows": 11,
+    "cols": 14,
+    "minRows": 11,
+    "minCols": 14,
+    "maxRows": 32,
+    "maxCols": 35,
+    "expandableRows": 20,
+    "expandableCols": 20,
+    "baseMaxHeat": 1000,
+    "baseMaxPower": 100
+  },
+  "features": {
+    "heatSuppression": false,
+    "breederMechanics": false,
+    "environmentalCooling": false,
+    "exchangerRouting": false,
+    "moxScaling": false,
+    "fluidMode": false,
+    "legacyLoopOrder": true,
+    "pendingDestruction": true,
+    "generatesMoney": true,
+    "doubleBufferedHeat": false,
+    "condensatorCooling": false,
+    "prestigeMechanics": true,
+    "offlineProgression": true,
+    "autoReplace": true,
+    "upgradeModifiers": true,
+    "chronometerSpeed": true,
+    "forcefulFusion": true,
+    "heatControlOperator": true,
+    "particleAccelerators": true,
+    "experimentalUpgrades": true
+  },
+  "economy": {
+    "currency": "Money",
+    "baseMoney": 10,
+    "autoSellPower": true,
+    "exoticParticles": "Exotic Particles",
+    "prestigeCurrency": "Exotic Particles",
+    "notes": "Core idle loop: generate power -> sell for money -> buy upgrades -> increase output"
+  },
+  "categories": [
+    {
+      "id": "cell",
+      "label": "FUEL CELLS"
+    },
+    {
+      "id": "reflector",
+      "label": "REFLECTORS"
+    },
+    {
+      "id": "capacitor",
+      "label": "CAPACITORS"
+    },
+    {
+      "id": "vent",
+      "label": "HEAT VENTS"
+    },
+    {
+      "id": "heat_exchanger",
+      "label": "HEAT EXCHANGERS"
+    },
+    {
+      "id": "heat_inlet",
+      "label": "HEAT INLETS"
+    },
+    {
+      "id": "heat_outlet",
+      "label": "HEAT OUTLETS"
+    },
+    {
+      "id": "coolant_cell",
+      "label": "COOLANT CELLS"
+    },
+    {
+      "id": "reactor_plating",
+      "label": "REACTOR PLATING"
+    },
+    {
+      "id": "particle_accelerator",
+      "label": "PARTICLE ACCELERATORS"
+    }
+  ],
+  "cellScaling": {
+    "prefixes": [
+      "",
+      "Dual ",
+      "Quad "
+    ],
+    "powerMultipliers": [
+      1,
+      4,
+      12
+    ],
+    "heatMultipliers": [
+      1,
+      8,
+      36
+    ],
+    "cellCounts": [
+      1,
+      2,
+      4
+    ],
+    "notes": "Cells use fixed multiplier arrays, not exponential scaling."
+  },
+  "tierScaling": {
+    "prefixes": [
+      "Basic ",
+      "Advanced ",
+      "Super ",
+      "Wondrous ",
+      "Ultimate "
+    ],
+    "nonCellMultiplierFormula": "base * multiplier^(level-1)",
+    "notes": "Non-cell parts with levels=5 generate 5 tiers with exponential scaling."
+  },
+  "mechanics": {
+    "cellPowerFormula": "base_power * (cellMultiplier + pulses) where pulses = sum(neighbor.pulses)",
+    "cellHeatFormula": "base_heat * (cellMultiplier + pulses)^2 / cellCount",
+    "reflectorEffect": "Adds powerIncrease% to adjacent cell power output",
+    "thermalReflectorEffect": "Also adds heatIncrease% to adjacent cell heat output",
+    "capacitorFunction": "Increases reactor max power. Holds heat. Extreme: heat added = 50% of power sold",
+    "ventFunction": "Lowers own heat by vent amount per tick. Extreme: consumes power = heat removed",
+    "exchangerFunction": "Balances heat between self and adjacent components by percentage",
+    "inletFunction": "Takes heat from adjacent components into reactor hull",
+    "outletFunction": "Takes heat from reactor hull into adjacent components",
+    "extremeExchangerFunction": "Also balances heat across entire row",
+    "thermionicCoolantFunction": "50% of heat added instantly converted to power",
+    "chargedPlatingFunction": "Increases both max heat AND max power of reactor",
+    "particleAcceleratorFunction": "Generates Exotic Particles based on heat. Explosion = instant meltdown",
+    "blackHoleAcceleratorFunction": "Actively draws heat from reactor at cost of 1 power per 1 heat",
+    "forcefulFusion": "Cells produce 1% more power at 1k heat, 2% at 2m heat, etc. per level",
+    "meltdownThreshold": "currentHeat > maxHeat * 2 (all parts explode)",
+    "offlineProgression": "Processes ticks while game is closed"
+  },
+  "currencies": [
+    {
+      "id": "money",
+      "name": "Money",
+      "baseAmount": 10
+    },
+    {
+      "id": "exotic_particles",
+      "name": "Exotic Particles",
+      "baseAmount": 0
+    }
+  ]
+}

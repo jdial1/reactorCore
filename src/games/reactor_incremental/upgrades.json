@@ -1,0 +1,87 @@
+{
+  "general": [
+    {
+      "id": "chronometer1",
+      "title": "Improved Chronometers",
+      "effect": "tick_rate",
+      "value": 1,
+      "baseCost": 10000,
+      "costMultiplier": 100,
+      "maxLevel": 6
+    },
+    {
+      "id": "forceful_fission1",
+      "title": "Forceful Fission",
+      "effect": "forceful_fission",
+      "value": 0.01,
+      "baseCost": 10000,
+      "costMultiplier": 100,
+      "maxLevel": 6
+    },
+    {
+      "id": "improved_power_lines",
+      "title": "Improved Power Lines",
+      "effect": "auto_sell_percent",
+      "value": 1,
+      "baseCost": 100,
+      "costMultiplier": 10,
+      "maxLevel": 32
+    }
+  ],
+  "prestige": [
+    {
+      "id": "research_grant",
+      "title": "Research Grant",
+      "currency": "ep",
+      "baseCost": 1,
+      "maxLevel": 1
+    },
+    {
+      "id": "infused_fuel_cells",
+      "title": "Infused Fuel Cells",
+      "currency": "ep",
+      "effect": "power_multiplier",
+      "value": 2,
+      "baseCost": 50,
+      "maxLevel": 1
+    },
+    {
+      "id": "unleashed_fuel_cells",
+      "title": "Unleashed Fuel Cells",
+      "currency": "ep",
+      "effect": "heat_multiplier",
+      "value": 2,
+      "baseCost": 100,
+      "maxLevel": 1
+    },
+    {
+      "id": "subspace_expansion",
+      "title": "Subspace Expansion",
+      "currency": "ep",
+      "baseCost": 500,
+      "maxLevel": 6,
+      "effect": "grid_expand"
+    },
+    {
+      "id": "protium_research",
+      "title": "Protium Research",
+      "currency": "ep",
+      "baseCost": 50,
+      "maxLevel": 1
+    },
+    {
+      "id": "monastium_research",
+      "title": "Monastium Research",
+      "currency": "ep",
+      "baseCost": 500,
+      "maxLevel": 1
+    },
+    {
+      "id": "stavrium_research",
+      "title": "Stavrium Research",
+      "currency": "ep",
+      "baseCost": 500000,
+      "maxLevel": 1
+    }
+  ]
+}

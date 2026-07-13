@@ -1,0 +1,95 @@
+{
+  "id": "ic2_exp_reactor_planner",
+  "name": "IC2 Experimental",
+  "description": "IndustrialCraft 2 Experimental reactor simulation. Source: MauveCloud Ic2ExpReactorPlanner.",
+  "source": {
+    "name": "Ic2ExpReactorPlanner",
+    "author": "MauveCloud",
+    "reference": "https://github.com/MauveCloud/Ic2ExpReactorPlanner",
+    "license": "GPL-2.0"
+  },
+  "version": "2.x (IC2 1.106+)",
+  "tickRate": 20,
+  "tickRateMs": 20,
+  "gridDefaults": {
+    "rows": 6,
+    "cols": 9,
+    "minChambers": 0,
+    "maxChambers": 6,
+    "baseMaxHeat": 10000
+  },
+  "features": {
+    "heatSuppression": false,
+    "breederMechanics": false,
+    "environmentalCooling": false,
+    "exchangerRouting": true,
+    "moxScaling": true,
+    "fluidMode": false,
+    "legacyLoopOrder": false,
+    "pendingDestruction": true,
+    "generatesMoney": false,
+    "doubleBufferedHeat": true,
+    "condensatorCooling": true,
+    "explosionPower": true
+  },
+  "modes": {
+    "eu": {
+      "label": "EU Mode",
+      "description": "Standard EU generation. Fuel rods produce EU directly and generate heat distributed to neighbors.",
+      "fluidMode": false,
+      "fuelBehavior": "generate_energy_and_heat"
+    },
+    "fluid": {
+      "label": "Fluid Mode",
+      "description": "Fluid reactor mode. Fuel rods vent heat to external fluid system instead of producing EU. MOX scaling active.",
+      "fluidMode": true,
+      "fuelBehavior": "vent_heat_only",
+      "moxNotes": "In fluid mode, MOX heat output doubles when hull heat > 50% of maxHeat."
+    }
+  },
+  "mechanics": {
+    "fuelHeatFormula": "heatMult * pulses * (pulses + 1) where pulses = neutronNeighbors + basePulses (1/2/3 for single/dual/quad)",
+    "fuelEnergyFormula": "energyMult * pulses, then MOX: floor(eu * (1 + 4.0 * hullHeat / maxHeat))",
+    "moxHeatDoubling": "When fluidMode AND hullHeat > 50% maxHeat, heat output doubles",
+    "reflectorDamage": "Reflector takes damage = rodCount of each adjacent fuel rod per tick",
+    "ventDissipateOrder": "1. Hull draw, 2. Self vent, 3. Side vent (if applicable)",
+    "exchangerTransferOrder": "1. Side transfer to neighbors, 2. Hull transfer",
+    "condensatorBehavior": "Only accepts positive heat. Needs coolant injection at >85% capacity. Cannot be cooled passively.",
+    "platingExplosionMultiplier": "Multiplicative across all plating pieces",
+    "meltdownThreshold": "currentHeat >= maxHeat"
+  },
+  "categories": [
+    {
+      "id": "fuel",
+      "label": "URANIUM FUEL"
+    },
+    {
+      "id": "mox",
+      "label": "MOX FUEL"
+    },
+    {
+      "id": "coolant",
+      "label": "COOLANT"
+    },
+    {
+      "id": "vent",
+      "label": "VENTS"
+    },
+    {
+      "id": "exchanger",
+      "label": "EXCHANGERS"
+    },
+    {
+      "id": "plating",
+      "label": "PLATING"
+    },
+    {
+      "id": "reflector",
+      "label": "REFLECTORS"
+    },
+    {
+      "id": "condensator",
+      "label": "CONDENSATORS"
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "id": "reactor_incremental",
+  "name": "Reactor Incremental",
+  "description": "Reactor Incremental (Cael Unity) verified-only simulation subset.",
+  "source": {
+    "name": "Reactor Incremental",
+    "author": "Cael",
+    "reference": "https://reactor-incremental.fandom.com/wiki/Reactor_incremental_Wiki",
+    "symbols": "reactorIncremental.json"
+  },
+  "version": "verified-subset",
+  "tickRate": 1,
+  "tickRateMs": 1000,
+  "tickRateUpgradable": true,
+  "baseTicksPerSecond": 1,
+  "gridDefaults": {
+    "rows": 11,
+    "cols": 14,
+    "minRows": 11,
+    "minCols": 14,
+    "maxRows": 17,
+    "maxCols": 17,
+    "baseMaxHeat": 1000,
+    "baseMaxPower": 100
+  },
+  "features": {
+    "heatSuppression": false,
+    "breederMechanics": false,
+    "environmentalCooling": false,
+    "exchangerRouting": false,
+    "moxScaling": false,
+    "fluidMode": false,
+    "legacyLoopOrder": true,
+    "pendingDestruction": true,
+    "generatesMoney": true,
+    "doubleBufferedHeat": false,
+    "condensatorCooling": false,
+    "prestigeMechanics": true,
+    "offlineProgression": true,
+    "autoReplace": true,
+    "upgradeModifiers": true,
+    "chronometerSpeed": true,
+    "forcefulFission": true,
+    "subspaceExpansion": true
+  },
+  "unsupportedCapabilities": [
+    "particle_accelerator",
+    "black_hole_accelerator",
+    "thermal_neutron_reflector",
+    "charged_reactor_plating",
+    "thermionic_coolant",
+    "extreme_vent_exchanger_inlet_outlet",
+    "time_flux",
+    "objectives",
+    "google_drive_save",
+    "kongregate_api",
+    "encrypted_save_import"
+  ],
+  "economy": {
+    "currency": "Money",
+    "baseMoney": 10,
+    "autoSellPower": true,
+    "exoticParticles": "Exotic Particles",
+    "prestigeCurrency": "Exotic Particles"
+  },
+  "categories": [
+    {
+      "id": "cell",
+      "label": "FUEL CELLS"
+    },
+    {
+      "id": "reflector",
+      "label": "REFLECTORS"
+    },
+    {
+      "id": "capacitor",
+      "label": "CAPACITORS"
+    },
+    {
+      "id": "vent",
+      "label": "HEAT VENTS"
+    },
+    {
+      "id": "heat_exchanger",
+      "label": "HEAT EXCHANGERS"
+    },
+    {
+      "id": "heat_inlet",
+      "label": "HEAT INLETS"
+    },
+    {
+      "id": "heat_outlet",
+      "label": "HEAT OUTLETS"
+    },
+    {
+      "id": "coolant_cell",
+      "label": "COOLANT CELLS"
+    },
+    {
+      "id": "reactor_plating",
+      "label": "REACTOR PLATING"
+    }
+  ],
+  "cellScaling": {
+    "prefixes": [
+      "",
+      "Double ",
+      "Quad "
+    ],
+    "powerMultipliers": [
+      1,
+      4,
+      12
+    ],
+    "heatMultipliers": [
+      1,
+      8,
+      36
+    ],
+    "cellCounts": [
+      1,
+      2,
+      4
+    ]
+  },
+  "tierScaling": {
+    "prefixes": [
+      "Basic ",
+      "Advanced ",
+      "Super ",
+      "Wondrous ",
+      "Ultimate "
+    ],
+    "multiplier": 16,
+    "nonCellMultiplierFormula": "base * multiplier^(level-1)"
+  },
+  "mechanics": {
+    "cellPowerFormula": "base_power * (cellMultiplier + pulses)",
+    "cellHeatFormula": "base_heat * (cellMultiplier + pulses)^2 / cellCount",
+    "meltdownThreshold": "currentHeat > maxHeat * 2",
+    "prestigeFormula": "(min(totalPower,totalHeat)/1e12)^0.60206",
+    "autoSellFormula": "maxPower * autoSellPercent / 100 per tick"
+  },
+  "currencies": [
+    "Money",
+    "Exotic Particles"
+  ]
+}

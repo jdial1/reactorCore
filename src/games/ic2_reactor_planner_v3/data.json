@@ -1,0 +1,84 @@
+{
+  "id": "ic2_reactor_planner_v3",
+  "name": "IC2 Classic",
+  "description": "IndustrialCraft 2 Legacy (pre-experimental / pre-v1.106) reactor simulation. Source: IC2 Reactor Planner v3 by Talonius.",
+  "source": {
+    "name": "IC2 Reactor Planner v3",
+    "author": "Talonius",
+    "reference": "https://forum.feed-the-beast.com/threads/request-for-ic2-reactor-planner-v3-download.164759/"
+  },
+  "version": "pre-1.106",
+  "tickRate": 20,
+  "tickRateMs": 20,
+  "gridDefaults": {
+    "rows": 6,
+    "cols": 9,
+    "minChambers": 0,
+    "maxChambers": 6,
+    "baseMaxHeat": 10000
+  },
+  "features": {
+    "heatSuppression": true,
+    "breederMechanics": true,
+    "environmentalCooling": true,
+    "exchangerRouting": false,
+    "moxScaling": false,
+    "fluidMode": false,
+    "legacyLoopOrder": true,
+    "pendingDestruction": true,
+    "generatesMoney": false,
+    "doubleBufferedHeat": false,
+    "condensatorCooling": false,
+    "explosionPower": true
+  },
+  "mechanics": {
+    "heatSuppression": "Adjacent coolant/exchanger/vent components reduce fuel rod heat output",
+    "breederMechanics": "Depleted Isotope Cells enrich into Uranium Cells based on hull heat and adjacent fuel rods",
+    "environmentalCooling": "Water blocks and ice blocks adjacent to reactor hull reduce heat",
+    "fuelHeatFormula": "(uCount + 1) * (10 - (min(cCount, 4) - 1) * 2) where uCount = adjacent uranium cells, cCount = adjacent cooling components",
+    "fuelEnergyFormula": "100 * rodCount * (uCount + 1)",
+    "meltdownThreshold": "currentHeat >= maxHeat"
+  },
+  "environmentalCooling": {
+    "waterBlock": {
+      "heatPerTick": 1000,
+      "maxAdjacent": 6
+    },
+    "iceBlock": {
+      "heatPerTick": 10000,
+      "maxAdjacent": 6
+    },
+    "biomeModifier": true,
+    "activeChambers": true
+  },
+  "categories": [
+    {
+      "id": "fuel",
+      "label": "URANIUM FUEL"
+    },
+    {
+      "id": "coolant",
+      "label": "COOLANT"
+    },
+    {
+      "id": "vent",
+      "label": "VENTS"
+    },
+    {
+      "id": "exchanger",
+      "label": "EXCHANGERS"
+    },
+    {
+      "id": "plating",
+      "label": "PLATING"
+    },
+    {
+      "id": "reflector",
+      "label": "REFLECTORS"
+    },
+    {
+      "id": "condensator",
+      "label": "CONDENSATORS"
+    }
+  ]
+}
