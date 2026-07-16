@@ -1,6 +1,7 @@
 import { forEachNeighbor, countNeighborsWith } from '../../kernel/neighbors.js';
 import { isBroken, adjustCurrentHeat, applyDamage } from '../createInstance.js';
 import { deterministicUnitInterval } from '../../kernel/deterministic-tick-rng.js';
+import { resolveEpHeat } from '../../systems/epHeat.js';
 
 const ACCELERATOR_EP_SALT = 0xacce1;
 
@@ -29,10 +30,12 @@ export function buildIncrementalCell(spec, modifiers = {}) {
     id, title, category, cellCount = 1,
     pulseMultiplier = 1, cellMultiplier = 1, baseCost, level = 1,
   } = spec;
-  const basePower = specStat(spec, 'power');
+  let basePower = specStat(spec, 'power');
   const baseHeat = specStat(spec, 'heat');
   let baseTicks = specStat(spec, 'ticks') || spec.baseTicks || 0;
   const partType = spec.type || '';
+  const powerLevel = modifiers.cellPowerByType?.[partType] || 0;
+  if (powerLevel > 0) basePower *= Math.pow(2, powerLevel);
   const tickLevel = modifiers.cellTicksByType?.[partType] || 0;
   if (tickLevel > 0) baseTicks = Math.floor(baseTicks * Math.pow(2, tickLevel));
   const ticksMult = modifiers.cellTicksMultiplier || 1;
@@ -287,7 +290,7 @@ export function buildIncrementalPlating(spec, modifiers = {}) {
   const reactorPower = specStat(spec, 'reactorPower');
   const reinforce = 1 + (modifiers.componentReinforcement || 0);
   const heatMult = (modifiers.platingCapacity || 1) * (1 + (modifiers.platingHeatBonus || 0)) * reinforce;
-  const effectiveHeat = Math.floor(reactorHeat * heatMult);
+  const effectiveHeat = reactorHeat * heatMult;
   const effectivePower = Math.floor(reactorPower * (modifiers.powerCapacity || 1));
 
   return createDef({
@@ -301,27 +304,41 @@ export function buildIncrementalPlating(spec, modifiers = {}) {
   });
 }
 
-export function buildIncrementalAccelerator(spec) {
+export function buildIncrementalAccelerator(spec, modifiers = {}) {
   const { id, title, category, baseCost, level = 1 } = spec;
-  const epHeat = specStat(spec, 'epHeat');
+  const baseEpHeat = specStat(spec, 'epHeat');
   const epChance = spec.epChance ?? spec.baseEpChance ?? 0;
   const containment = specStat(spec, 'containment');
+  const epHeatOptions = {
+    partLevel: level,
+    acceleratorEpHeatByLevel: modifiers.acceleratorEpHeatByLevel,
+    catalystReduction: modifiers.catalystReduction || 0,
+  };
+  const epHeat = resolveEpHeat(baseEpHeat, epHeatOptions);
+
   return createDef({
     id, name: id, title, category: category || 'particle_accelerator', displayName: title,
-    maxHeat: containment || 1, containment, epHeat, epChance, baseCost, level,
+    maxHeat: containment || 1, containment, baseEpHeat, epHeat, epChance, baseCost, level,
 
     generateEnergy(instance, grid, row, col, ctx) {
       const heldHeat = (typeof grid.getTileHeat === 'function' ? grid.getTileHeat(row, col) : 0) || instance.currentHeat;
-      if (!(heldHeat > 1) || !epHeat || !ctx?.economy) return 0;
-      const lowerHeat = Math.min(heldHeat, epHeat);
-      let epChance = (Math.log(lowerHeat) / Math.LN10) * (lowerHeat / epHeat);
+      const threshold = resolveEpHeat(baseEpHeat, {
+        ...epHeatOptions,
+        exoticParticles: ctx?.economy?.currentExoticParticles,
+        weaveQuantum: ctx?.economy?.weaveQuantum
+          ?? ctx?.session?.systems?.economy?.weaveQuantum
+          ?? ctx?.session?.manifest?.economy?.weaveQuantum,
+      });
+      if (!(heldHeat > 1) || !threshold || !ctx?.economy) return 0;
+      const lowerHeat = Math.min(heldHeat, threshold);
+      let chance = (Math.log(lowerHeat) / Math.LN10) * (lowerHeat / threshold);
       let epGain = 0;
-      if (epChance > 1) {
-        epGain = Math.floor(epChance);
-        epChance -= epGain;
+      if (chance > 1) {
+        epGain = Math.floor(chance);
+        chance -= epGain;
       }
       const salt = (ACCELERATOR_EP_SALT ^ (row * 0x1f1f + col * 0x2e2e)) | 0;
-      if (epChance > deterministicUnitInterval(ctx.tickCount ?? 0, salt)) epGain++;
+      if (chance > deterministicUnitInterval(ctx.tickCount ?? 0, salt)) epGain++;
       if (epGain > 5) epGain = 5;
       if (epGain > 0) ctx.economy.addExoticParticles(epGain);
       return 0;

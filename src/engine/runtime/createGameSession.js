@@ -27,6 +27,7 @@ import { isValidGridCoord } from '../kernel/gridUtils.js';
 import { listCompiledParts, getCompiledPart } from '../systems/partCatalog.js';
 import { resolvePartDisplayRates, resolveDisplayRates } from '../reactor/heat/effectiveRates.js';
 import { previewPrestige, calculateWeaveEp } from '../systems/prestige.js';
+import { resolveEpHeat } from '../systems/epHeat.js';
 import { partAutoReplaceCost } from '../systems/mechanicsPolicy.js';
 
 const RULESET_MODULES = {
@@ -305,6 +306,20 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       }
       return resolvePartDisplayRates(partIdOrInstOrDef, session);
     },
+    resolveEpHeat: (partIdOrDef) => {
+      const part = typeof partIdOrDef === 'string'
+        ? getCompiledPart(session, partIdOrDef)
+        : partIdOrDef;
+      if (!part) return 0;
+      const base = part.baseEpHeat ?? part.epHeat ?? part.definition?.baseEpHeat ?? 0;
+      return resolveEpHeat(base, {
+        partLevel: part.level ?? part.definition?.level ?? 1,
+        acceleratorEpHeatByLevel: modifiers.acceleratorEpHeatByLevel,
+        catalystReduction: modifiers.catalystReduction || 0,
+        exoticParticles: systems.economy?.currentExoticParticles,
+        weaveQuantum: systems.economy?.weaveQuantum ?? manifest.economy?.weaveQuantum,
+      });
+    },
     previewPrestige: (options) => previewPrestige(session, options),
     calculatePrestigeReward: () => systems.economy?.calculatePrestigeReward?.()
       ?? calculateWeaveEp(
@@ -393,8 +408,11 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       grid.resetHeat();
       grid.resetPower();
       engine.reset();
-      recompileModifiers();
+      if (session.placedCounts) {
+        for (const key of Object.keys(session.placedCounts)) session.placedCounts[key] = 0;
+      }
       ruleset.onPrestige?.(session, resolved);
+      recompileModifiers();
       events.emit('reboot', { earned, options: resolved, ...prestigePayload });
       if (keepEp) events.emit('prestigeCompleted', { ...prestigePayload, earned });
       return earned;
@@ -491,7 +509,10 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     getSnapshot() {
       const failure = systems.failure?.serialize?.();
       const statsOptions = {
-        autoSellPercent: systems.upgrades?.getAutoSellPercent?.() ?? modifiers?.autoSellPercent ?? 0,
+        autoSellPercent: mechanicsOverrides?.autoSellPercent
+          ?? systems.upgrades?.getAutoSellPercent?.()
+          ?? modifiers?.autoSellPercent
+          ?? 0,
         prestigeMultiplier: systems.economy?.getPrestigeMultiplier?.() ?? 1,
         mechanicsOverrides: session.mechanicsOverrides,
         toggles,

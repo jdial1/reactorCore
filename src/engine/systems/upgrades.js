@@ -129,6 +129,8 @@ export function createUpgradeStore(manifest, options = {}) {
           transfer: (typeof compiled?.transferRate === 'number' ? compiled.transferRate : null)
             ?? (typeof compiled?.transfer === 'number' ? compiled.transfer : null)
             ?? part?.transfer ?? null,
+          epHeat: compiled?.epHeat ?? part?.epHeat ?? null,
+          baseEpHeat: compiled?.baseEpHeat ?? part?.baseEpHeat ?? part?.epHeat ?? null,
           perpetual: !!(compiled?.perpetual),
         } : null;
         const classList = buildClassList(def, { available, maxed, visible });

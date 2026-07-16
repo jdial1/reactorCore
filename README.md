@@ -137,18 +137,19 @@ Revival `upgrades.json` includes `auto_sell_operator` / `auto_buy_operator`. Pur
 
 ### Prestige / achievements
 
-Prefer core ownership for weave + reboot:
+Prefer core ownership for weave + reboot — call `session.prestige()` (or `session.reboot`) as the sole reboot owner and drop parallel host `applyDefaults` / `clearState`:
 
 ```js
 session.previewPrestige(); // { earned, weaveQuantum, keepEp, fuelCellCount, ... }
 session.calculatePrestigeReward();
-session.prestige(); // alias: reboot({ keepEp: true, refundEp: false })
-session.reboot({ keepEp: true }); // or refundEp: true for full reset
+session.prestige(); // reboot({ keepEp: true, refundEp: false }): clears grid, keeps EP upgrades, resets money upgrades / failure / objectives
+session.reboot({ keepEp: true }); // same keep-EP path
+session.reboot({ refundEp: true }); // full reset: clears all upgrades
 ```
 
 `calculateWeaveEp(power, heat, weaveQuantum)` is exported for UI without a session. Revival `economy.weaveQuantum` defaults to `manifest.economy.weaveQuantum` (1e6).
 
-If the host still runs a parallel applyDefaults path, it must emit `prestigeCompleted` with `{ keepEp: true, fuelCellCount, sessionPowerProduced, sessionHeatDissipated }` (and preferably `earned`) so achievements match. Prefer `session.prestige()` / `session.reboot({ keepEp: true })` instead.
+`prestigeCompleted` is emitted by core when `keepEp === true`. Hosts that still run a parallel reset must emit the same payload themselves.
 
 - Prestige achievements unlock only when `keepEp === true`.
 - `criticality_recovery_auto` aborts when `soldHeatCount` increases during recovery (full vent / remaining ≤ ε), including after a prior full vent before criticality. A full `VENT_HEAT` (`ventHeat` + `soldHeat` pair) counts once.
@@ -166,14 +167,23 @@ session.getPart('capacitor2');
 
 `listUpgrades()` `part` refs include the same compiled fields when `session.registry` is present.
 
-**Catalog parity (1.2.7):** compiled defs now match host display for:
+**Catalog parity (1.2.7+):** compiled defs match host display for:
 
 - `improved_heat_vents` / `improved_heat_exchangers`: +100%/level rate **and** capacity (`vent_boost` / `transfer_boost`)
 - `improved_reflector_density`: doubles reflector `baseTicks` via `reflectorDurationMultiplier`
 - `improved_neutron_reflection`: +1%/level on `powerIncrease`; `full_spectrum_reflectors`: +100% of base `powerIncrease` per level
 - Experimental: `fluid_hyperdynamics`, `fractal_piping`, `ultracryonics` (coolant ×2^n)
+- Cell `_cell_power`: `basePower` baked as `×2^level` in `getPart` / `listParts` (and runtime defs)
+- Plating `reactorHeat`: unfloored `base × platingCapacity × (1+platingHeatBonus) × (1+reinforcement)` for ceramic_composite shop parity
+- PA `epHeat`: `resolveEpHeat` / `session.resolveEpHeat` / catalog `epHeat` — `base × (IPA_level+1) × EP scale × (1−catalyst)`; tick EP chance uses the same scaled threshold
 
 Drop host-local multiplier walks for these. `infused_cells` / `unleashed_cells` remain global cell `powerMultiplier` / `heatMultiplier` (knockoff-style), not reflector/transfer overlays from the upgrade blurb.
+
+**PA epHeat scale** (host `deriveEpHeat` parity):
+
+- EP scale = `1 + log10(EP / weaveQuantum)` when `EP > weaveQuantum`, else `1`
+- `improved_particle_acceleratorsN` multiplies by `(upgradeLevel + 1)` for that part level
+- `sub_atomic_catalysts` multiplies by `(1 − min(0.75, catalystReduction))`
 
 ### Display vent / transfer rates
 
@@ -282,6 +292,16 @@ session.checkObjective(context);
 Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting in the host.
 
 ## Changelog
+
+### 1.2.8
+
+Shop / stats / prestige cutover:
+
+- Bake `cell_power` into compiled cell `basePower` (`×2^level`); runtime coeffs use the baked value
+- Bake PA `epHeat` via `resolveEpHeat` / `session.resolveEpHeat` / `getPart.epHeat` (EP log scale + IPA + catalyst); tick EP chance uses the same threshold
+- Plating `reactorHeat` no longer floored (ceramic_composite shop parity)
+- Snapshot / stats prefer `mechanicsOverrides.autoSellPercent` (control-deck) over upgrade-only percent
+- `session.prestige()` / `reboot({ keepEp })` keep EP upgrades, clear money upgrades, then recompile; preferred sole reboot owner
 
 ### 1.2.7
 

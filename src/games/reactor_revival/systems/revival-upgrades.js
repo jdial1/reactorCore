@@ -143,26 +143,31 @@ export function createTechTreePurchaseGate(manifest) {
   };
 }
 
+function mapRevivalUpgrade(u) {
+  const mapped = REVIVAL_EFFECTS[u.actionId] || REVIVAL_EFFECTS[u.id] || {};
+  const isAcceleratorHeat = u.type === 'experimental_particle_accelerators'
+    || (typeof u.id === 'string' && u.id.startsWith('improved_particle_accelerators'));
+  return {
+    id: u.id,
+    title: u.title,
+    description: u.description || null,
+    baseCost: u.ecost != null ? u.ecost : u.cost,
+    costMultiplier: u.multiplier ?? 2,
+    maxLevel: u.levels ?? null,
+    currency: u.ecost != null ? 'ep' : 'money',
+    erequires: u.erequires ? [u.erequires] : undefined,
+    effect: isAcceleratorHeat ? 'accelerator_ep_heat' : (mapped.effect || u.actionId || 'custom'),
+    value: mapped.value ?? 1,
+    category: mapped.category,
+    partLevel: u.part_level ?? mapped.partLevel ?? null,
+    type: u.type || null,
+    icon: u.icon || null,
+    section: u.type || null,
+  };
+}
+
 export function createRevivalUpgradeStore(manifest, options = {}) {
-  const flatUpgrades = (manifest.upgrades || []).map((u) => {
-    const mapped = REVIVAL_EFFECTS[u.actionId] || REVIVAL_EFFECTS[u.id] || {};
-    return {
-      id: u.id,
-      title: u.title,
-      description: u.description || null,
-      baseCost: u.ecost != null ? u.ecost : u.cost,
-      costMultiplier: u.multiplier ?? 2,
-      maxLevel: u.levels ?? null,
-      currency: u.ecost != null ? 'ep' : 'money',
-      erequires: u.erequires ? [u.erequires] : undefined,
-      effect: mapped.effect || u.actionId || 'custom',
-      value: mapped.value ?? 1,
-      category: mapped.category,
-      type: u.type || null,
-      icon: u.icon || null,
-      section: u.type || null,
-    };
-  });
+  const flatUpgrades = (manifest.upgrades || []).map(mapRevivalUpgrade);
 
   flatUpgrades.push(
     ...buildCellPowerUpgrades(manifest.components),

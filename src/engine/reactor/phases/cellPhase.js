@@ -73,9 +73,6 @@ export function resolveCellCoefficients(def, options = {}) {
   power *= powerMult;
   heat *= heatMult;
 
-  const typeLevel = modifiers.cellPowerByType?.[def.type] || 0;
-  if (typeLevel > 0) power *= Math.pow(2, typeLevel);
-
   if (def.type === 'protium') {
     const unstable = modifiers.unstableProtiumLevel || 0;
     if (unstable > 0) {

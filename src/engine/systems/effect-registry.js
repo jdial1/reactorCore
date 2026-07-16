@@ -51,6 +51,7 @@ export function createBaseModifiers() {
     cellTicksByType: {},
     cellTicksMultiplier: 1,
     unstableProtiumLevel: 0,
+    acceleratorEpHeatByLevel: {},
   };
 }
 
@@ -227,6 +228,12 @@ export const EFFECT_HANDLERS = {
   },
   unstable_protium(mods, def, level) {
     mods.unstableProtiumLevel = level;
+  },
+  accelerator_ep_heat(mods, def, level) {
+    if (level <= 0) return;
+    const partLevel = def.partLevel ?? def.part_level;
+    if (partLevel == null) return;
+    mods.acceleratorEpHeatByLevel[partLevel] = level;
   },
 };
 

@@ -23,6 +23,7 @@ import {
   partAutoReplaceCost,
   calculateWeaveEp,
   previewPrestige,
+  resolveEpHeat,
 } from '../src/index.js';
 import {
   buildIncrementalCapacitor,
@@ -601,4 +602,79 @@ test('experimental fluid/fractal/ultracryonics compile into part catalog', async
   assert.equal(session.getPart('heat_exchanger1').containment, ex0.containment * 2);
   assert.equal(session.purchaseUpgrade('ultracryonics'), true);
   assert.equal(session.getPart('coolant_cell1').containment, cool0.containment * 2);
+});
+
+test('cell_power bakes into getPart basePower without double-applying coeffs', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  const before = session.getPart('uranium1').basePower;
+  assert.equal(session.purchaseUpgrade('uranium1_cell_power'), true);
+  const after = session.getPart('uranium1');
+  assert.equal(after.basePower, before * 2);
+  const coeffs = resolveCellCoefficients(after.definition, { modifiers: session.modifiers });
+  assert.equal(coeffs.power, after.basePower);
+});
+
+test('ceramic_composite plating reactorHeat stays unfloored', () => {
+  const plate = buildIncrementalPlating(
+    { id: 'reactor_plating1', title: 'P', reactorHeat: 250 },
+    { platingHeatBonus: 0.05 },
+  );
+  assert.equal(plate.reactorHeat, 250 * 1.05);
+  assert.equal(plate.heatAdjustment, 262.5);
+});
+
+test('resolveEpHeat matches host deriveEpHeat scale', () => {
+  const base = 500_000_000;
+  assert.equal(resolveEpHeat(base, { exoticParticles: 0 }), base);
+  assert.equal(resolveEpHeat(base, { upgradeLevel: 1 }), base * 2);
+  assert.equal(
+    resolveEpHeat(base, { exoticParticles: 10_000_000, weaveQuantum: 1_000_000 }),
+    base * (1 + Math.log10(10)),
+  );
+  assert.equal(
+    resolveEpHeat(base, { catalystReduction: 0.05 }),
+    base * 0.95,
+  );
+  assert.equal(
+    resolveEpHeat(base, { catalystReduction: 0.9 }),
+    base * 0.25,
+  );
+});
+
+test('getPart PA epHeat applies IPA and live EP scale', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addExoticParticles(10_000_000);
+  const base = session.getPart('particle_accelerator1');
+  assert.equal(base.baseEpHeat, 500_000_000);
+  assert.equal(base.epHeat, 500_000_000 * (1 + Math.log10(10)));
+  assert.equal(session.purchaseUpgrade('laboratory'), true);
+  assert.equal(session.purchaseUpgrade('improved_particle_accelerators1'), true);
+  session.systems.economy.addExoticParticles(201);
+  const after = session.getPart('particle_accelerator1');
+  assert.equal(after.epHeat, 500_000_000 * 2 * (1 + Math.log10(10)));
+  assert.equal(session.resolveEpHeat('particle_accelerator1'), after.epHeat);
+});
+
+test('snapshot stats honor mechanicsOverrides.autoSellPercent', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const maxPower = session.grid.maxPower || 0;
+  const prestige = session.systems.economy.getPrestigeMultiplier();
+  session.mechanicsOverrides = { ...session.mechanicsOverrides, autoSellPercent: 42 };
+  assert.equal(session.getSnapshot().stats.cash, Math.floor(maxPower * 42 / 100) * prestige);
+  session.mechanicsOverrides = { ...session.mechanicsOverrides, autoSellPercent: 10 };
+  assert.equal(session.getSnapshot().stats.cash, Math.floor(maxPower * 10 / 100) * prestige);
+});
+
+test('prestige keeps EP upgrades and clears money upgrades', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  session.systems.economy.addExoticParticles(500);
+  assert.equal(session.purchaseUpgrade('improved_heat_vents'), true);
+  assert.equal(session.purchaseUpgrade('laboratory'), true);
+  assert.equal(session.systems.upgrades.getLevel('improved_heat_vents'), 1);
+  assert.equal(session.systems.upgrades.getLevel('laboratory'), 1);
+  session.prestige();
+  assert.equal(session.systems.upgrades.getLevel('improved_heat_vents'), 0);
+  assert.equal(session.systems.upgrades.getLevel('laboratory'), 1);
 });

@@ -12,6 +12,7 @@ export { createEconomy } from './engine/systems/economy.js';
 export { createUpgradeStore } from './engine/systems/upgrades.js';
 export { compileMechanicsOverrides, buildAutoReplaceCosts, partAutoReplaceCost, isPartPerpetual, CAPACITOR_AUTO_REPLACE_MULTIPLIER, PERPETUAL_AUTO_REPLACE_MULTIPLIER } from './engine/systems/mechanicsPolicy.js';
 export { listCompiledParts, getCompiledPart, projectCompiledPart } from './engine/systems/partCatalog.js';
+export { resolveEpHeat, CATALYST_REDUCTION_CAP, DEFAULT_WEAVE_QUANTUM } from './engine/systems/epHeat.js';
 export { calculateWeaveEp, previewPrestige } from './engine/systems/prestige.js';
 export { createAutomation, createOffline } from './engine/systems/automation.js';
 export { serializeSession, deserializeSession } from './engine/systems/codecs.js';

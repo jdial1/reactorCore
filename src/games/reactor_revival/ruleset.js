@@ -83,7 +83,18 @@ export function createRuleset({ manifest }) {
     },
 
     onPrestige(session, { refundEp = false } = {}) {
-      if (!refundEp) session.systems.upgrades?.deserialize([]);
+      const upgrades = session.systems.upgrades;
+      if (upgrades) {
+        if (refundEp) {
+          upgrades.deserialize([]);
+        } else {
+          const kept = upgrades.serialize().filter((entry) => {
+            const def = upgrades.getDefinition?.(entry.id);
+            return def && (def.currency === 'ep' || def.currency === 'exotic_particles');
+          });
+          upgrades.deserialize(kept);
+        }
+      }
       session.systems.failure?.reset?.();
       session.systems.objectives?.setIndex?.(0);
     },

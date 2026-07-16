@@ -1,10 +1,38 @@
+import { resolveEpHeat } from './epHeat.js';
+
 function pickManifestPart(manifest, id) {
   return (manifest?.components || []).find((c) => c.id === id) || null;
 }
 
-export function projectCompiledPart(def, raw = null) {
+function catalogOptions(session) {
+  if (!session) return {};
+  return {
+    modifiers: session.modifiers,
+    exoticParticles: session.systems?.economy?.currentExoticParticles,
+    weaveQuantum: session.systems?.economy?.weaveQuantum
+      ?? session.manifest?.economy?.weaveQuantum,
+  };
+}
+
+function resolveCatalogEpHeat(def, src, options = {}) {
+  const category = def.category || src.category;
+  if (category !== 'particle_accelerator') {
+    return def.epHeat ?? src.epHeat ?? 0;
+  }
+  const base = def.baseEpHeat ?? src.baseEpHeat ?? src.epHeat ?? def.epHeat ?? 0;
+  return resolveEpHeat(base, {
+    partLevel: def.level ?? src.level ?? 1,
+    acceleratorEpHeatByLevel: options.modifiers?.acceleratorEpHeatByLevel,
+    catalystReduction: options.modifiers?.catalystReduction || 0,
+    exoticParticles: options.exoticParticles,
+    weaveQuantum: options.weaveQuantum,
+  });
+}
+
+export function projectCompiledPart(def, raw = null, options = {}) {
   if (!def) return null;
   const src = raw || {};
+  const baseEpHeat = def.baseEpHeat ?? src.baseEpHeat ?? src.epHeat ?? null;
   return {
     id: def.id,
     title: def.title || def.displayName || src.title || def.id,
@@ -32,6 +60,8 @@ export function projectCompiledPart(def, raw = null) {
     cellCount: def.cellCount ?? src.cellCount ?? null,
     cellMultiplier: def.cellMultiplier ?? src.cellMultiplier ?? null,
     perpetual: !!def.perpetual,
+    baseEpHeat,
+    epHeat: resolveCatalogEpHeat(def, src, options),
     definition: def,
   };
 }
@@ -40,12 +70,13 @@ export function listCompiledParts(session) {
   const registry = session?.registry;
   if (!registry?.getAll) return [];
   const byId = new Map((session.manifest?.components || []).map((c) => [c.id, c]));
-  return registry.getAll().map((def) => projectCompiledPart(def, byId.get(def.id)));
+  const options = catalogOptions(session);
+  return registry.getAll().map((def) => projectCompiledPart(def, byId.get(def.id), options));
 }
 
 export function getCompiledPart(session, id) {
   if (!session?.registry || id == null) return null;
   const def = session.registry.get(id);
   if (!def) return null;
-  return projectCompiledPart(def, pickManifestPart(session.manifest, id));
+  return projectCompiledPart(def, pickManifestPart(session.manifest, id), catalogOptions(session));
 }

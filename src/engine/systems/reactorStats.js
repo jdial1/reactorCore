@@ -150,7 +150,10 @@ export function createReactorStatsComputer(options = {}) {
   return {
     compute({ grid, modifiers, upgrades, economy, mechanicsOverrides, toggles }) {
       return deriveReactorStats(grid, modifiers || {}, {
-        autoSellPercent: upgrades?.getAutoSellPercent?.() ?? modifiers?.autoSellPercent ?? 0,
+        autoSellPercent: mechanicsOverrides?.autoSellPercent
+          ?? upgrades?.getAutoSellPercent?.()
+          ?? modifiers?.autoSellPercent
+          ?? 0,
         prestigeMultiplier: economy?.getPrestigeMultiplier?.() ?? options.prestigeMultiplier ?? 1,
         mechanicsOverrides,
         toggles,
