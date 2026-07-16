@@ -1,6 +1,10 @@
 import { isBroken } from '../reactor/createInstance.js';
-import { computeNeighborPulseN, computeCellOutput, resolveCellCoefficients } from '../reactor/phases/cellPhase.js';
-import { CARDINAL_OFFSETS } from '../kernel/gridUtils.js';
+import {
+  computeNeighborPulseN,
+  computeCellOutput,
+  resolveCellCoefficients,
+  countActiveReflectorNeighbors,
+} from '../reactor/phases/cellPhase.js';
 import {
   computeGridMultiplierBonuses,
   resolveTransferRate,
@@ -11,15 +15,6 @@ import { heatPowerMultiplier } from './heatPower.js';
 const HEAT_EPSILON = 0.001;
 
 export { heatPowerMultiplier };
-
-function countActiveReflectorNeighbors(grid, row, col) {
-  let count = 0;
-  for (const [dr, dc] of CARDINAL_OFFSETS) {
-    const neighbor = grid.getComponentAt(row + dr, col + dc);
-    if (neighbor && !isBroken(neighbor) && neighbor.definition.category === 'reflector' && neighbor.ticks > 0) count++;
-  }
-  return count;
-}
 
 function manualVentReduction(grid, modifiers = {}, options = {}) {
   const baseReduce = (options.baseManualHeatReduce ?? 1) * (modifiers.manualVentMultiplier || 1);
@@ -170,4 +165,4 @@ export function createReactorStatsComputer(options = {}) {
   };
 }
 
-export { resolveCellCoefficients, manualVentReduction, HEAT_EPSILON, computeGridMultiplierBonuses };
+export { resolveCellCoefficients, countActiveReflectorNeighbors, manualVentReduction, HEAT_EPSILON, computeGridMultiplierBonuses };

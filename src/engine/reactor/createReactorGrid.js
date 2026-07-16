@@ -199,7 +199,8 @@ export function createReactorGrid(manifest) {
       reactorGrid.forEach((_, __, inst) => {
         const def = inst?.definition;
         if (!def) return;
-        if (def.heatAdjustment) reactorGrid.maxHeat += def.heatAdjustment;
+        const heatAdj = def.heatAdjustment ?? def.reactorHeat ?? 0;
+        if (heatAdj) reactorGrid.maxHeat += heatAdj;
         const powerAdj = def.powerAdjustment ?? def.reactorPower ?? 0;
         if (powerAdj) reactorGrid.maxPower += powerAdj;
       });

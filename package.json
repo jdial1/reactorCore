@@ -1,10 +1,13 @@
 {
   "name": "reactor-core-lib",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Shared reactor simulation engine for Reactor Revival and related games",
   "type": "module",
   "license": "ISC",
   "author": "Justin Dial",
+  "scripts": {
+    "test": "node --test test/regression.test.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jdial1/reactorCore.git"

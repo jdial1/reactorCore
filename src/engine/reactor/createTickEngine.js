@@ -3,6 +3,20 @@ import { createPhaseRunners } from './createPhaseRunners.js';
 import { hashGridState } from '../kernel/hashState.js';
 import { preTick } from './createInstance.js';
 import { copyHeatFlowVectors } from './heat/heatPipeline.js';
+
+export function copyCellOutputs(outputs = []) {
+  if (!outputs.length) return Object.freeze([]);
+  return Object.freeze(outputs.map((o) => Object.freeze({
+    row: o.row,
+    col: o.col,
+    power: o.power,
+    heat: o.heat,
+    pulseN: o.pulseN,
+    pulse: o.pulse,
+    reflectorCount: o.reflectorCount,
+    heatBoost: o.heatBoost,
+  })));
+}
 export function createTickEngine(grid, manifest, hooks, systems = {}, options = {}) {
   const features = manifest.features;
   const runners = options.customRunners || createPhaseRunners(features);
@@ -129,6 +143,10 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
 
     getLastHeatFlowVectors() {
       return copyHeatFlowVectors(lastResult?.heatFlowVectors);
+    },
+
+    getLastCellOutputs() {
+      return copyCellOutputs(lastResult?.cellOutputs);
     },
 
     simulateCycle(options = {}) {

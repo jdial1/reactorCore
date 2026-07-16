@@ -10,9 +10,8 @@ const TRANSFER_CATEGORIES = new Set(['heat_exchanger', 'heat_inlet', 'heat_outle
 
 function isContainmentNode(inst) {
   if (!inst) return false;
-  const def = inst.definition;
-  if ((def.containment || 0) > 0) return true;
-  const cat = def.category;
+  if (resolveContainment(inst) > 0) return true;
+  const cat = inst.definition.category;
   return cat === 'heat_exchanger' || cat === 'heat_inlet' || cat === 'heat_outlet' || cat === 'valve';
 }
 

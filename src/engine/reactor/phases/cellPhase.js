@@ -53,6 +53,17 @@ function processReflectorNeighbors(grid, row, col, multiplier, offsets = CARDINA
   }
 }
 
+export function countActiveReflectorNeighbors(grid, row, col, offsets = CARDINAL_OFFSETS) {
+  let count = 0;
+  for (const [dr, dc] of offsets) {
+    const neighbor = grid.getComponentAt(row + dr, col + dc);
+    if (neighbor && !isBroken(neighbor) && neighbor.definition.category === 'reflector' && neighbor.ticks > 0) {
+      count++;
+    }
+  }
+  return count;
+}
+
 export function resolveCellCoefficients(def, options = {}) {
   let power = def.basePower ?? def.power ?? 0;
   let heat = def.baseHeat ?? def.heat ?? 0;
@@ -108,11 +119,12 @@ export function runCellPhase(ctx, policy = {}) {
   let powerAdd = 0;
   let heatAdd = 0;
   const modifiers = ctx.session?.modifiers || ctx.upgrades?.compileModifiers?.() || {};
+  const overrides = ctx.session?.mechanicsOverrides || {};
   const reflectorCooling = policy.reflectorCooling?.(ctx)
-    ?? ctx.session?.mechanicsOverrides?.reflectorCoolingFactor
+    ?? overrides.reflectorCoolingFactor
     ?? modifiers.reflectorCoolingFactor
     ?? 0;
-  const heatPowerMult = ctx.session?.mechanicsOverrides?.heatPowerMultiplier
+  const heatPowerMult = overrides.heatPowerMultiplier
     ?? modifiers.heatPowerMultiplier
     ?? 0;
   const heatBoost = heatPowerMultiplier(heatPowerMult, grid.currentHeat || 0);
@@ -121,7 +133,8 @@ export function runCellPhase(ctx, policy = {}) {
   const coeffOptions = {
     modifiers,
     protiumParticles,
-    honorHostEffective: policy.honorHostEffective === true,
+    honorHostEffective: policy.honorHostEffective === true
+      || overrides.honorHostEffective === true,
   };
 
   grid.forEach((row, col, inst) => {
@@ -129,14 +142,7 @@ export function runCellPhase(ctx, policy = {}) {
     const def = inst.definition;
     if (def.category !== 'cell' || inst.ticks <= 0) return;
 
-    let reflectorCount = 0;
-    for (const [dr, dc] of CARDINAL_OFFSETS) {
-      const neighbor = grid.getComponentAt(row + dr, col + dc);
-      if (neighbor && !isBroken(neighbor) && neighbor.definition.category === 'reflector' && neighbor.ticks > 0) {
-        reflectorCount++;
-      }
-    }
-
+    const reflectorCount = countActiveReflectorNeighbors(grid, row, col);
     const m = def.cellMultiplier ?? def.pulseMultiplier ?? 1;
     const n = computeNeighborPulseN(grid, row, col);
     const pulse = m + n;
@@ -176,6 +182,6 @@ export function runCellPhase(ctx, policy = {}) {
 
   ctx.result.heatOutput = (ctx.result.heatOutput || 0) + heatAdd;
   ctx.result.powerOutput = (ctx.result.powerOutput || 0) + powerAdd;
-  ctx.result.cellOutputs = cellOutputs;
-  return { powerAdd, heatAdd, cellOutputs };
+  ctx.result.cellOutputs = Object.freeze(cellOutputs.map((o) => Object.freeze({ ...o })));
+  return { powerAdd, heatAdd, cellOutputs: ctx.result.cellOutputs };
 }

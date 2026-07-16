@@ -29,7 +29,7 @@ session.dispatch({ type: 'PLACE_PART_PAID', payload: { row: 0, col: 0, id: 'uran
 
 Supported `GAME_IDS`: `reactor_revival`, `reactor_incremental`, `reactor_knockoff`, `ic2_reactor_planner_v3`, `ic2_exp_reactor_planner`.
 
-## Host cutover guide (1.2.4)
+## Host cutover guide (1.2.5)
 
 Use these APIs so the host stops reimplementing cost math, sell refunds, modifier key mapping, and upgrade catalog shaping.
 
@@ -69,9 +69,12 @@ computeInstanceSellValue(inst, { row, col, grid });
 
 Policy (matches host):
 
-- Cells with ticks: `ceil(cost * ticksRemaining / maxTicks)`
-- Containment parts: `cost - ceil(cost * heatContained / containment)`
+- Cells with ticks: `ceil(cost * min(1, max(0, ticksRemaining / maxTicks)))`
+- Containment parts: `cost - ceil(cost * min(1, heatContained / containment))`
 - Else full `cost` (`def.cost ?? def.baseCost`)
+- Custom `sellValuePolicy` / `computeSellValue` returning non-finite values credits **0**
+
+Note: host Isotope Stabilization can yield fractional max ticks (e.g. 15.75) while core `baseTicks` stays floored; ratios may still diverge until tick defs share the same max.
 
 Override with `session.sellValuePolicy = (inst, ctx) => number` or payload `policy.computeSellValue`.
 
@@ -114,11 +117,24 @@ session.dispatch({
 
 **Lib:** Revival `parts.json` now stores the **single-cell coefficient** on all forms (`uranium1/2/3` → `basePower: 1`). Pulse math remains `basePower * (cellMultiplier + neighborN)`.
 
-### Honor host effective power/heat in stats
+### Honor host effective power/heat (transitional)
 
-**Problem:** `cellPhase` already respected `honorHostEffective`; `deriveReactorStats` did not.
+`cellPhase` and `deriveReactorStats` both honor `mechanicsOverrides.honorHostEffective` (or policy/options). When set, they use `inst._effectivePower` / `_effectiveHeat` if present.
 
-**Use:** Set `mechanicsOverrides.honorHostEffective = true` (or pass `options.honorHostEffective`). Stats then use `inst._effectivePower` / `_effectiveHeat` when present.
+**Prefer the core path:** `resolveCellCoefficients` + pulse (`cellMultiplier + neighborN`) for dual/quad, `cellPowerByType`, and protium. Keep `honorHostEffective` only until host mid-test `tile.power` mutations and objective sustained-power cases match without it; then drop the bridge feed.
+
+### Layout caps (capacitor / plating)
+
+Revival `parts.json` bakes host expansion for tiers 1–5:
+
+- Capacitor: `reactorPower = 100 * 140^(level-1)`, `containment = 10 * 5^(level-1)`
+- Plating: `reactorHeat = 250 * 150^(level-1)`
+
+`recalculateCaps` sums `reactorPower` into `maxPower` and `reactorHeat` into `maxHeat`. Hosts can drop `applyLayoutCapsFromGame` once on 1.2.5+.
+
+### Vent / transfer / containment rates
+
+`resolveVentRate` / `resolveTransferRate` / `resolveContainment` use def base rates × compiled grid bonuses only. Host `_effectiveVent` / `_effectiveTransfer` / `_effectiveContainment` are **ignored** so the bridge can stop copying tile getters every sync.
 
 ### Heat-flow vectors (presentation)
 
@@ -134,6 +150,22 @@ session.getSnapshot().heatFlowVectors;
 ```
 
 Recorded from valve/exchanger transfers every tick. Accessors and snapshots return **copied frozen** vectors (safe to retain across ticks).
+
+### Cell outputs (paused HUD / pulse display)
+
+Last tick `cellOutputs` (power, heat, pulse, pulseN, **reflectorCount**, heatBoost) persist on:
+
+```js
+session.getCellOutputs();
+session.engine.getLastCellOutputs();
+session.getSnapshot().cellOutputs; // alias lastCellOutputs
+```
+
+Use this instead of host-local pulse recompute. `countActiveReflectorNeighbors(grid, row, col)` is exported for tooltips.
+
+### Snapshot net change
+
+`getSnapshot()` always sets numeric `powerNetChange` / `heatNetChange` (and `heatRatio`) from stats, falling back to `deriveReactorStats` when needed so hosts can drop overflow/auto-sell fallback math for live UI.
 
 ### Modifier projection for tooltips / legacy tile code
 
@@ -178,6 +210,18 @@ session.checkObjective(context);
 Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting in the host.
 
 ## Changelog
+
+### 1.2.5
+
+Host cutover follow-ups:
+
+- Cap sell life ratio at 1; reject non-finite custom sell policies
+- `cellPhase` reads `mechanicsOverrides.honorHostEffective` (matches stats)
+- Package regression tests (`npm test`)
+- Snapshot always populates `powerNetChange` / `heatNetChange`; persists frozen `cellOutputs` / `lastCellOutputs`
+- Bake capacitor/plating tier-scaled `reactorPower` / `containment` / `reactorHeat`; `recalculateCaps` applies `reactorHeat`
+- Vent/transfer/containment resolve from defs + modifiers only (ignore host `_effective*`)
+- Export `countActiveReflectorNeighbors` / `copyCellOutputs` / `session.getCellOutputs`
 
 ### 1.2.4
 

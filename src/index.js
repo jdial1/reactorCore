@@ -5,7 +5,7 @@ export { createRegistry } from './engine/kernel/createRegistry.js';
 export { createHookBus } from './engine/kernel/createHookBus.js';
 export { validateManifest, assertCapability } from './engine/kernel/validateManifest.js';
 export { createReactorGrid } from './engine/reactor/createReactorGrid.js';
-export { createTickEngine } from './engine/reactor/createTickEngine.js';
+export { createTickEngine, copyCellOutputs } from './engine/reactor/createTickEngine.js';
 export { buildBehavior, buildDefinitionsFromManifest } from './engine/reactor/behaviors/index.js';
 export { createInstance, cloneInstance, preTick, isBroken } from './engine/reactor/createInstance.js';
 export { createEconomy } from './engine/systems/economy.js';
@@ -23,6 +23,7 @@ export { createFailureSystem } from './engine/systems/failure.js';
 export { deriveReactorStats, createReactorStatsComputer, heatPowerMultiplier } from './engine/systems/reactorStats.js';
 export {
   computeNeighborPulseN,
+  countActiveReflectorNeighbors,
   runCellPhase,
   computeCellOutput,
   resolveCellCoefficients,

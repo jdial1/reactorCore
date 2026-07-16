@@ -1,4 +1,5 @@
 import { isBroken } from './createInstance.js';
+import { resolveContainment } from './heat/effectiveRates.js';
 
 function getIntegrity(grid, row, col) {
   if (grid.tileHeatMap) return grid.tileHeatMap.getIntegrity(row, col);
@@ -15,7 +16,7 @@ export function applyThermalStress(ctx) {
 
   ctx.grid.forEach((row, col, inst) => {
     if (!inst) return;
-    const cap = inst._effectiveContainment ?? inst.definition.containment ?? 0;
+    const cap = resolveContainment(inst);
     if (cap <= 0) return;
     const heat = ctx.grid.getTileHeat(row, col);
     const pressure = heat / cap;
@@ -50,7 +51,7 @@ export function collectOverpressureExplosions(ctx) {
     if (!inst || inst.pendingDestruction || isBroken(inst)) return;
     const activated = grid.tileHeatMap?.isActivated(row, col) ?? true;
     if (!activated) return;
-    const cap = inst._effectiveContainment ?? inst.definition.containment ?? 0;
+    const cap = resolveContainment(inst);
     if (cap <= 0) return;
     const heat = grid.getTileHeat(row, col);
     const integrity = getIntegrity(grid, row, col);

@@ -58,24 +58,15 @@ export function baseVentRate(inst) {
 }
 
 export function resolveTransferRate(inst, bonuses = {}) {
-  if (typeof inst._effectiveTransfer === 'number' && Number.isFinite(inst._effectiveTransfer)) {
-    return inst._effectiveTransfer;
-  }
   return baseTransferRate(inst) * (bonuses.transferMultiplier ?? 1);
 }
 
 export function resolveVentRate(inst, bonuses = {}) {
-  if (typeof inst._effectiveVent === 'number' && Number.isFinite(inst._effectiveVent)) {
-    return inst._effectiveVent;
-  }
   return baseVentRate(inst) * (bonuses.ventMultiplier ?? 1);
 }
 
 export function resolveContainment(inst) {
-  if (typeof inst._effectiveContainment === 'number' && Number.isFinite(inst._effectiveContainment)) {
-    return inst._effectiveContainment;
-  }
-  return inst.definition.containment || 0;
+  return inst?.definition?.containment || inst?.definition?.baseContainment || 0;
 }
 
 export function resolveSessionModifiers(ctx) {

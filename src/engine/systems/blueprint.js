@@ -231,14 +231,16 @@ export function computePartSellValue(def, sellMultiplier = DEFAULT_SELL_MULTIPLI
 export function computeInstanceSellValue(inst, context = {}) {
   if (!inst) return 0;
   if (typeof context.computeSellValue === 'function') {
-    return Math.max(0, toNum(context.computeSellValue(inst, context)));
+    const raw = toNum(context.computeSellValue(inst, context));
+    if (!Number.isFinite(raw)) return 0;
+    return Math.max(0, raw);
   }
   const def = inst.definition;
   if (!def) return 0;
   const cost = partSellCost(def);
   const maxTicks = toNum(def.baseTicks ?? def.ticks ?? 0);
   if (maxTicks > 0 && typeof inst.ticks === 'number') {
-    const lifeRemainingRatio = Math.max(0, inst.ticks / maxTicks);
+    const lifeRemainingRatio = Math.min(1, Math.max(0, inst.ticks / maxTicks));
     return Math.max(0, Math.ceil(cost * lifeRemainingRatio));
   }
   const containment = toNum(def.containment ?? def.baseContainment ?? 0);
@@ -246,7 +248,7 @@ export function computeInstanceSellValue(inst, context = {}) {
     const heat = context.heatContained != null
       ? toNum(context.heatContained)
       : toNum(context.grid?.getTileHeat?.(context.row, context.col) ?? inst.currentHeat ?? 0);
-    const damageRatio = Math.min(1, heat / containment);
+    const damageRatio = Math.min(1, Math.max(0, heat / containment));
     return Math.max(0, cost - Math.ceil(cost * damageRatio));
   }
   return Math.max(0, cost);

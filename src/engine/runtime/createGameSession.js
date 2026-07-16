@@ -12,6 +12,7 @@ import { createOffline } from '../systems/automation.js';
 import { toNumber } from '../systems/decimal.js';
 import { compileMechanicsOverrides, CORE_MECHANICS_OVERRIDE_KEYS } from '../systems/mechanicsPolicy.js';
 import { buildContainmentSegments } from '../reactor/heat/containmentSegments.js';
+import { deriveReactorStats } from '../systems/reactorStats.js';
 import {
   computeAbsoluteLayoutCost,
   filterAffordablePlacements,
@@ -289,6 +290,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     },
     projectModifiers: () => projectModifiersForHost(modifiers),
     getHeatFlowVectors: () => engine.getLastHeatFlowVectors?.() ?? Object.freeze([]),
+    getCellOutputs: () => engine.getLastCellOutputs?.() ?? Object.freeze([]),
     dispatch: (command) => commands.enqueue(command),
     drainEvents: () => events.drain(),
     recompileModifiers,
@@ -439,6 +441,19 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
 
     getSnapshot() {
       const failure = systems.failure?.serialize?.();
+      const statsOptions = {
+        autoSellPercent: systems.upgrades?.getAutoSellPercent?.() ?? modifiers?.autoSellPercent ?? 0,
+        prestigeMultiplier: systems.economy?.getPrestigeMultiplier?.() ?? 1,
+        mechanicsOverrides: session.mechanicsOverrides,
+        toggles,
+        autoSellActive: toggles?.auto_sell,
+        protiumParticles: systems.economy?.protiumParticles ?? 0,
+        criticalHeatRatio: manifest.mechanics?.criticalHeatRatio ?? 0.85,
+        highHeatRatio: manifest.mechanics?.highHeatRatio ?? 0.7,
+        baseManualHeatReduce: manifest.mechanics?.baseManualHeatReduce ?? 1,
+        powerOverflowToHeatRatio: manifest.mechanics?.economy?.powerOverflowToHeatRatio ?? 1,
+        includeManualVent: true,
+      };
       const stats = systems.stats?.compute?.({
         grid,
         modifiers,
@@ -446,8 +461,9 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         economy: systems.economy,
         mechanicsOverrides: session.mechanicsOverrides,
         toggles,
-      });
+      }) ?? deriveReactorStats(grid, modifiers, statsOptions);
       const containmentSegments = buildContainmentSegments(grid, { modifiers });
+      const cellOutputs = engine.getLastCellOutputs?.() ?? Object.freeze([]);
       const snapshot = {
         grid: grid.getSnapshot(),
         economy: systems.economy?.serialize(),
@@ -460,12 +476,14 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         objectives: systems.objectives?.serialize?.(),
         achievements: systems.achievements?.serialize?.() ?? [...session.achievements],
         stats,
-        heatRatio: stats?.heatRatio,
-        heatWarningLevel: stats?.heatWarningLevel,
-        powerNetChange: stats?.powerNetChange,
-        heatNetChange: stats?.heatNetChange,
+        heatRatio: stats?.heatRatio ?? 0,
+        heatWarningLevel: stats?.heatWarningLevel ?? null,
+        powerNetChange: stats?.powerNetChange ?? 0,
+        heatNetChange: stats?.heatNetChange ?? 0,
         containmentSegments,
         heatFlowVectors: engine.getLastHeatFlowVectors?.() ?? Object.freeze([]),
+        cellOutputs,
+        lastCellOutputs: cellOutputs,
         engine: { tickCount: engine.tickCount, meltdown: engine.meltdown },
         toggles: { ...toggles },
         techTree: session.techTree,
