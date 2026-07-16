@@ -1,4 +1,12 @@
+import {
+  computeGridMultiplierBonuses,
+  resolveContainment,
+  resolveTransferRate,
+  resolveVentRate,
+} from './effectiveRates.js';
+
 const OFFSETS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const TRANSFER_CATEGORIES = new Set(['heat_exchanger', 'heat_inlet', 'heat_outlet', 'valve']);
 
 function isContainmentNode(inst) {
   if (!inst) return false;
@@ -22,7 +30,9 @@ function union(parent, a, b) {
   if (ra !== rb) parent[rb] = ra;
 }
 
-export function buildContainmentSegments(grid) {
+export function buildContainmentSegments(grid, options = {}) {
+  const modifiers = options.modifiers || {};
+  const bonuses = options.bonuses || computeGridMultiplierBonuses(grid, modifiers);
   const nodes = [];
   const indexOf = new Map();
 
@@ -30,13 +40,19 @@ export function buildContainmentSegments(grid) {
     if (!isContainmentNode(inst)) return;
     const key = `${row},${col}`;
     indexOf.set(key, nodes.length);
+    const containment = resolveContainment(inst);
+    const heat = grid.getTileHeat(row, col) || 0;
+    const category = inst.definition.category;
     nodes.push({
       row,
       col,
       id: inst.definition.id,
-      category: inst.definition.category,
-      containment: inst.definition.containment || 0,
-      heat: grid.getTileHeat(row, col) || 0,
+      category,
+      containment,
+      heat,
+      fullness: containment > 0 ? heat / containment : 0,
+      ventRate: category === 'vent' ? resolveVentRate(inst, bonuses) : 0,
+      transferRate: TRANSFER_CATEGORIES.has(category) ? resolveTransferRate(inst, bonuses) : 0,
     });
   });
 
@@ -60,15 +76,22 @@ export function buildContainmentSegments(grid) {
   return [...groups.values()].map((tiles) => {
     let totalHeat = 0;
     let totalContainment = 0;
+    let totalVentRate = 0;
+    let totalTransferRate = 0;
     for (const tile of tiles) {
       totalHeat += tile.heat;
       totalContainment += tile.containment;
+      totalVentRate += tile.ventRate;
+      totalTransferRate += tile.transferRate;
     }
     return {
       tiles,
       totalHeat,
       totalContainment,
+      totalVentRate,
+      totalTransferRate,
       pressure: totalContainment > 0 ? totalHeat / totalContainment : 0,
+      fullness: totalContainment > 0 ? totalHeat / totalContainment : 0,
     };
   });
 }

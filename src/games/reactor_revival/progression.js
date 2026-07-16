@@ -187,17 +187,21 @@ export function createObjectiveSystem(manifest, { hooks } = {}) {
     };
   }
 
-  function buildView(session) {
+  function buildView(session, context = {}) {
     const grid = session.grid;
     const economy = session.systems?.economy;
     const upgrades = session.systems?.upgrades;
+    const failure = context.failure ?? session.systems?.failure?.serialize?.() ?? session.systems?.failure;
+    const meltdown = context.meltdown ?? context.hasMeltedDown
+      ?? failure?.hasMeltedDown
+      ?? session.engine?.meltdown
+      ?? false;
     return {
       grid,
       economy,
       upgrades,
-      paused: !!session.paused,
-      meltdown: !!session.engine?.meltdown,
-      tickCount: session.engine?.tickCount || 0,
+      paused: context.paused ?? !!session.paused,
+      tickCount: context.tickCount ?? session.engine?.tickCount ?? 0,
       baseMoney,
       flags,
       experimentalIds,
@@ -205,19 +209,24 @@ export function createObjectiveSystem(manifest, { hooks } = {}) {
       stats: deriveReactorStats(grid, session.modifiers || {}, {
         autoSellPercent: upgrades?.getAutoSellPercent?.() ?? 0,
         prestigeMultiplier: economy?.getPrestigeMultiplier?.() ?? 1,
+        mechanicsOverrides: session.mechanicsOverrides,
       }),
       sustained: {
         get: (key) => sustained[key] ?? 0,
         start: (key, tick) => { sustained[key] = tick; },
         reset: (key) => { sustained[key] = 0; },
       },
+      ...context,
+      meltdown: !!meltdown,
+      hasMeltedDown: !!(context.hasMeltedDown ?? failure?.hasMeltedDown ?? meltdown),
+      failure: failure || null,
     };
   }
 
-  function evaluate(checkId, session) {
+  function evaluate(checkId, session, context = {}) {
     const checker = OBJECTIVE_CHECKS[checkId];
     if (!checker) return null;
-    return checker(buildView(session));
+    return checker(buildView(session, context));
   }
 
   function maxValidIndex() {
@@ -237,18 +246,18 @@ export function createObjectiveSystem(manifest, { hooks } = {}) {
     markComplete(index) { completed.add(index); },
     isComplete(index) { return completed.has(index); },
     getCurrentObjective() { return objectives[currentIndex] || null; },
-    getCurrentProgress(session) {
+    getCurrentProgress(session, context = {}) {
       const objective = objectives[currentIndex];
       if (!objective) return { completed: false, percent: 0, text: '' };
       if (completed.has(currentIndex)) return { completed: true, percent: 100, text: '' };
-      return evaluate(objective.checkId, session) || { completed: false, percent: 0, text: 'Awaiting completion...' };
+      return evaluate(objective.checkId, session, context) || { completed: false, percent: 0, text: 'Awaiting completion...' };
     },
-    checkCurrent(session) {
+    checkCurrent(session, context = {}) {
       const objective = objectives[currentIndex];
       if (!objective) return false;
       if (objective.checkId === 'allObjectives') return false;
       if (completed.has(currentIndex)) return false;
-      const result = evaluate(objective.checkId, session);
+      const result = evaluate(objective.checkId, session, context);
       if (!result?.completed) return false;
       completed.add(currentIndex);
       session.events?.emit('objectiveComplete', { index: currentIndex, objective });

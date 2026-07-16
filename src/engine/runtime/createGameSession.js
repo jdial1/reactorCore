@@ -11,6 +11,13 @@ import { createEventQueue } from '../systems/events.js';
 import { createOffline } from '../systems/automation.js';
 import { toNumber } from '../systems/decimal.js';
 import { compileMechanicsOverrides, CORE_MECHANICS_OVERRIDE_KEYS } from '../systems/mechanicsPolicy.js';
+import { buildContainmentSegments } from '../reactor/heat/containmentSegments.js';
+import {
+  computeAbsoluteLayoutCost,
+  filterAffordablePlacements,
+  previewPartialBlueprint,
+  computeBlueprintCostBreakdown,
+} from '../systems/blueprint.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -241,6 +248,15 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     previewUpgrade: (id) => systems.upgrades?.previewPurchase?.(id, systems.economy, session) ?? null,
     listUpgrades: () => systems.upgrades?.listDisplayCatalog?.(session) ?? [],
     isUpgradeAvailable: (id) => systems.upgrades?.isAvailable?.(id, session) ?? false,
+    getObjectiveProgress: (context = {}) => systems.objectives?.getCurrentProgress?.(session, context)
+      ?? { completed: false, percent: 0, text: '' },
+    checkObjective: (context = {}) => systems.objectives?.checkCurrent?.(session, context) ?? false,
+    previewPartialBlueprint: (layout, options = {}, policy = {}) =>
+      previewPartialBlueprint(session, layout, options, policy),
+    filterAffordablePlacements: (placements, sellCredit = 0, policy = {}) =>
+      filterAffordablePlacements(session, placements, sellCredit, policy),
+    layoutCost: (layout, policy = {}) => computeAbsoluteLayoutCost(session, layout, policy),
+    blueprintCostBreakdown: (layout, policy = {}) => computeBlueprintCostBreakdown(session, layout, policy),
     dispatch: (command) => commands.enqueue(command),
     drainEvents: () => events.drain(),
     recompileModifiers,
@@ -361,6 +377,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         mechanicsOverrides: session.mechanicsOverrides,
         toggles,
       });
+      const containmentSegments = buildContainmentSegments(grid, { modifiers });
       const snapshot = {
         grid: grid.getSnapshot(),
         economy: systems.economy?.serialize(),
@@ -377,6 +394,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         heatWarningLevel: stats?.heatWarningLevel,
         powerNetChange: stats?.powerNetChange,
         heatNetChange: stats?.heatNetChange,
+        containmentSegments,
         engine: { tickCount: engine.tickCount, meltdown: engine.meltdown },
         toggles: { ...toggles },
         techTree: session.techTree,

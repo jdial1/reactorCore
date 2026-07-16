@@ -35,15 +35,15 @@ export function layoutFromPlannerSlots(session, slots) {
   return layout;
 }
 
-function partUsesEp(def) {
-  return !!(def.erequires || def.currency === 'ep' || def.ecost != null);
+export function partUsesEp(def) {
+  return !!(def?.erequires || def?.currency === 'ep' || def?.ecost != null);
 }
 
-function partCostForCell(def, cell, policy = {}) {
+export function partCostForCell(def, cell, policy = {}) {
   if (!def) return { money: 0, ep: 0 };
   if (policy.partCostForCell) return policy.partCostForCell(def, cell);
   const level = cell?.lvl || def.level || 1;
-  const base = def.baseCost || 0;
+  const base = def.baseCost ?? def.cost ?? 0;
   let n;
   if (getDecimalCtor()) {
     n = toNumber(toDecimal(base).mul(level));
@@ -54,6 +54,13 @@ function partCostForCell(def, cell, policy = {}) {
   return { money: n, ep: 0 };
 }
 
+function resolvePartDef(session, cell) {
+  if (!cell?.id) return null;
+  return session.registry?.get?.(cell.id)
+    || session.manifest?.components?.find((component) => component.id === cell.id)
+    || null;
+}
+
 function cellsMatch(inst, cell) {
   if (!cell?.id) return !inst;
   if (!inst) return false;
@@ -62,7 +69,7 @@ function cellsMatch(inst, cell) {
 }
 
 export function computeBlueprintDiff(session, targetLayout, policy = {}) {
-  const { grid, registry } = session;
+  const { grid } = session;
   if (!targetLayout) {
     return { toRemove: [], toPlace: [], unchanged: [], breakdown: { money: 0, ep: 0 } };
   }
@@ -83,7 +90,7 @@ export function computeBlueprintDiff(session, targetLayout, policy = {}) {
       }
       if (inst) toRemove.push({ r, c, inst });
       if (cell?.id) {
-        const def = registry.get?.(cell.id);
+        const def = resolvePartDef(session, cell);
         if (def) {
           toPlace.push({ r, c, cell, def });
           const cost = partCostForCell(def, cell, policy);
@@ -100,6 +107,28 @@ export function computeBlueprintCostBreakdown(session, targetLayout, policy = {}
   return computeBlueprintDiff(session, targetLayout, policy).breakdown;
 }
 
+export function computeAbsoluteLayoutCost(session, layout, policy = {}) {
+  const rows = session.grid?.rows ?? layout?.length ?? 0;
+  const cols = session.grid?.cols ?? layout?.[0]?.length ?? 0;
+  const clipped = clipToGrid(layout || [], rows, cols);
+  const breakdown = { money: 0, ep: 0 };
+  const items = [];
+  for (let r = 0; r < clipped.length; r++) {
+    const row = clipped[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (!cell?.id) continue;
+      const def = resolvePartDef(session, cell);
+      if (!def) continue;
+      const cost = partCostForCell(def, cell, policy);
+      breakdown.money += cost.money;
+      breakdown.ep += cost.ep;
+      items.push({ r, c, cell, def, cost });
+    }
+  }
+  return { breakdown, items };
+}
+
 function checkAffordability(session, breakdown, sellCredit = 0) {
   const economy = session.systems.economy;
   if (!economy) return null;
@@ -112,8 +141,8 @@ function checkAffordability(session, breakdown, sellCredit = 0) {
   return null;
 }
 
-function filterAffordablePlacements(session, placements, sellCredit = 0, policy = {}) {
-  const economy = session.systems.economy;
+export function filterAffordablePlacements(session, placements, sellCredit = 0, policy = {}) {
+  const economy = session.systems?.economy;
   let money = toNum(economy?.money) + sellCredit;
   let ep = toNum(economy?.currentExoticParticles);
   const affordable = [];
@@ -130,6 +159,31 @@ function filterAffordablePlacements(session, placements, sellCredit = 0, policy 
     affordable.push(entry);
   }
   return affordable;
+}
+
+export function previewPartialBlueprint(session, targetLayout, options = {}, policy = {}) {
+  const diff = computeBlueprintDiff(session, targetLayout, policy);
+  const sellCredit = options.sellCredit ?? 0;
+  const affordable = filterAffordablePlacements(session, diff.toPlace, sellCredit, policy);
+  const affordableKeys = new Set(affordable.map((p) => `${p.r},${p.c}`));
+  const deferred = diff.toPlace.filter((p) => !affordableKeys.has(`${p.r},${p.c}`));
+  const affordableBreakdown = affordable.reduce(
+    (out, { def, cell }) => {
+      const cost = partCostForCell(def, cell, policy);
+      out.money += cost.money;
+      out.ep += cost.ep;
+      return out;
+    },
+    { money: 0, ep: 0 },
+  );
+  return {
+    ...diff,
+    affordable,
+    deferred,
+    sellCredit,
+    affordableBreakdown,
+    deficit: checkAffordability(session, diff.breakdown, sellCredit),
+  };
 }
 
 function debitLayoutCost(session, breakdown) {
