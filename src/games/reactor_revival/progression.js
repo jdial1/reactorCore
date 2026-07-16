@@ -208,9 +208,12 @@ export function createObjectiveSystem(manifest, { hooks } = {}) {
       experimentalIds,
       chapterProgress,
       stats: deriveReactorStats(grid, session.modifiers || {}, {
-        autoSellPercent: upgrades?.getAutoSellPercent?.() ?? 0,
+        autoSellPercent: session.mechanicsOverrides?.autoSellPercent
+          ?? upgrades?.getAutoSellPercent?.()
+          ?? 0,
         prestigeMultiplier: economy?.getPrestigeMultiplier?.() ?? 1,
         mechanicsOverrides: session.mechanicsOverrides,
+        protiumParticles: economy?.protiumParticles ?? 0,
       }),
       sustained: {
         get: (key) => sustained[key] ?? 0,
@@ -261,7 +264,18 @@ export function createObjectiveSystem(manifest, { hooks } = {}) {
       const result = evaluate(objective.checkId, session, context);
       if (!result?.completed) return false;
       completed.add(currentIndex);
-      session.events?.emit('objectiveComplete', { index: currentIndex, objective });
+      if (objective.reward != null || objective.ep_reward != null) {
+        session.grantReward?.({
+          money: objective.reward,
+          ep: objective.ep_reward,
+        });
+      }
+      session.events?.emit('objectiveComplete', {
+        index: currentIndex,
+        objective,
+        reward: objective.reward ?? null,
+        epReward: objective.ep_reward ?? null,
+      });
       return true;
     },
 

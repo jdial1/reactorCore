@@ -24,6 +24,11 @@ import {
   calculateWeaveEp,
   previewPrestige,
   resolveEpHeat,
+  heatPowerMultiplier,
+  projectCellOutputs,
+  describeCellPulse,
+  deriveReactorStats,
+  toNumber,
 } from '../src/index.js';
 import {
   buildIncrementalCapacitor,
@@ -677,4 +682,208 @@ test('prestige keeps EP upgrades and clears money upgrades', async () => {
   session.prestige();
   assert.equal(session.systems.upgrades.getLevel('improved_heat_vents'), 0);
   assert.equal(session.systems.upgrades.getLevel('laboratory'), 1);
+});
+
+test('getPart bakes heat_power shop multiplier into power', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  const cold = session.getPart('uranium1');
+  assert.equal(cold.heatBoost, 1);
+  assert.equal(cold.power, cold.basePower * (cold.cellMultiplier || 1));
+  assert.equal(session.purchaseUpgrade('forceful_fusion'), true);
+  session.grid.currentHeat = 1000;
+  const hot = session.getPart('uranium1');
+  const expectedBoost = heatPowerMultiplier(1, 1000);
+  assert.equal(hot.heatBoost, expectedBoost);
+  assert.equal(hot.power, hot.basePower * (hot.cellMultiplier || 1) * expectedBoost);
+  const compiled = session.compilePartStats('uranium1');
+  assert.equal(compiled.power, hot.power);
+});
+
+test('refreshCellOutputs covers every live cell before next tick', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  assert.equal(session.getCellOutputs().length, 0);
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  assert.equal(session.placeComponent(0, 1, 'uranium1'), true);
+  const beforeTick = session.getCellOutputs();
+  assert.equal(beforeTick.length, 2);
+  assert.ok(session.getCellOutputAt(0, 0));
+  assert.ok(session.getCellOutputAt(0, 1));
+  assert.equal(beforeTick.every((o) => o.power > 0 && o.pulse >= 1), true);
+  const projected = projectCellOutputs(session);
+  assert.equal(projected.length, 2);
+  session.tick();
+  assert.equal(session.getCellOutputs().length, 2);
+  session.removeComponent(0, 1);
+  assert.equal(session.getCellOutputs().length, 1);
+  assert.equal(session.getCellOutputAt(0, 1), null);
+});
+
+test('stats and objectives do not require inst.power or inst.heat', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  const inst = session.grid.getComponentAt(0, 0);
+  assert.equal(inst.power, undefined);
+  assert.equal(inst.heat, undefined);
+  const stats = deriveReactorStats(session.grid, session.modifiers, {
+    mechanicsOverrides: session.mechanicsOverrides,
+  });
+  assert.ok(stats.power > 0);
+  assert.ok(stats.cellPower > 0);
+  session.tick();
+  const progress = session.getObjectiveProgress();
+  assert.equal(typeof progress.completed, 'boolean');
+  assert.equal(typeof progress.percent, 'number');
+});
+
+test('session.getPipelineStages exposes revival stages', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const stages = session.getPipelineStages();
+  assert.ok(stages.includes('cells'));
+  assert.ok(stages.includes('heat'));
+  assert.ok(stages.includes('objectives'));
+  assert.deepEqual(stages, session.ruleset.createPipeline().stages);
+});
+
+test('hasTickActivity detects live parts, autosell power, and pending intents', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  assert.equal(session.hasTickActivity(), false);
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  assert.equal(session.hasTickActivity(), true);
+  session.removeComponent(0, 0);
+  assert.equal(session.hasTickActivity(), false);
+  session.toggles.auto_sell = true;
+  session.grid.currentPower = 10;
+  assert.equal(session.hasTickActivity(), true);
+  session.grid.currentPower = 0;
+  assert.equal(session.hasTickActivity(), false);
+  session.dispatch({ type: 'VENT_HEAT', payload: {} });
+  assert.equal(session.hasTickActivity(), true);
+});
+
+test('describeCellPulse returns structured neighbor pulse facts', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  assert.equal(session.placeComponent(0, 1, 'reflector1'), true);
+  assert.equal(session.placeComponent(1, 0, 'uranium1'), true);
+  const desc = session.describeCellPulse(0, 0);
+  assert.equal(desc.id, 'uranium1');
+  assert.equal(desc.cellMultiplier, 1);
+  assert.ok(desc.pulseN > 0);
+  assert.equal(desc.pulse, desc.cellMultiplier + desc.pulseN);
+  assert.ok(desc.neighbors.some((n) => n.kind === 'reflector' && n.contribution > 0));
+  assert.ok(desc.neighbors.some((n) => n.kind === 'cell' && n.contribution > 0));
+  assert.equal(describeCellPulse(session.grid, 0, 1), null);
+});
+
+test('economy intents own money mutations and emit economyChanged', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const events = [];
+  session.hooks.on('game:economyChanged', (payload) => events.push(payload));
+  const baseMoney = toNumber(session.systems.economy.money);
+  assert.equal(session.creditMoney(100), true);
+  assert.equal(toNumber(session.systems.economy.money), baseMoney + 100);
+  assert.equal(session.debitMoney(25), true);
+  assert.equal(toNumber(session.systems.economy.money), baseMoney + 75);
+  assert.equal(session.dispatch({ type: 'CREDIT_EP', payload: { amount: 7 } }), true);
+  session.tick();
+  assert.equal(toNumber(session.systems.economy.currentExoticParticles), 7);
+  assert.ok(events.some((e) => e.reason === 'credit_money'));
+  assert.ok(events.some((e) => e.reason === 'debit_money'));
+  assert.ok(events.some((e) => e.reason === 'credit_ep'));
+  session.loadEconomyState({ money: 50, currentExoticParticles: 1, totalExoticParticles: 1 });
+  assert.equal(toNumber(session.systems.economy.money), 50);
+  assert.ok(events.some((e) => e.reason === 'load'));
+});
+
+test('grantReward and GRANT_REWARD credit money/EP', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const before = toNumber(session.systems.economy.money);
+  assert.deepEqual(session.grantReward({ money: 10 }), { ok: true, money: 10, ep: 0 });
+  assert.equal(toNumber(session.systems.economy.money), before + 10);
+  session.dispatch({ type: 'GRANT_REWARD', payload: { ep: 3 } });
+  session.tick();
+  assert.equal(toNumber(session.systems.economy.currentExoticParticles), 3);
+});
+
+test('objective completion grants reward via session economy', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const before = toNumber(session.systems.economy.money);
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  assert.equal(session.checkObjective(), true);
+  assert.equal(toNumber(session.systems.economy.money), before + 10);
+});
+
+test('listUpgrades is sufficient sole UI source for levels/costs', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(1_000_000);
+  const catalog = session.listUpgrades();
+  const vents = catalog.find((u) => u.id === 'improved_heat_vents');
+  assert.ok(vents);
+  assert.equal(vents.level, 0);
+  assert.equal(vents.nextLevel, 1);
+  assert.ok(vents.cost > 0);
+  assert.ok(vents.baseCost > 0);
+  assert.ok(Array.isArray(vents.classList));
+  assert.equal(session.getUpgradeLevel('improved_heat_vents'), 0);
+  assert.equal(session.purchaseUpgrade('improved_heat_vents'), true);
+  assert.equal(session.getUpgradeLevel('improved_heat_vents'), 1);
+  assert.equal(session.listUpgrades().find((u) => u.id === 'improved_heat_vents').level, 1);
+  session.setUpgradeLevels([{ id: 'improved_heat_vents', level: 2 }]);
+  assert.equal(session.getUpgradeLevel('improved_heat_vents'), 2);
+});
+
+test('session command queue accepts host action shape and drains immediately', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(1_000_000);
+  assert.equal(session.enqueueIntent({
+    action: 'PLACE_PART',
+    payload: { row: 0, col: 0, partId: 'uranium1', paid: true },
+  }), true);
+  assert.equal(session.pendingCommands, 1);
+  assert.equal(session.peekCommands()[0].type, 'PLACE_PART');
+  assert.equal(session.peekCommands()[0].payload.id, 'uranium1');
+  const applied = session.drainCommands();
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0].result.ok, true);
+  assert.ok(session.grid.getComponentAt(0, 0));
+  const ran = session.runCommand({ type: 'SELL_PART', payload: { row: 0, col: 0 } });
+  assert.equal(ran.ok, true);
+  assert.equal(session.grid.getComponentAt(0, 0), null);
+  assert.equal(session.pendingCommands, 0);
+});
+
+test('placedCounts increment/rebuild own UnlockManager counters', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(1_000_000);
+  assert.equal(session.getPlacedCount('uranium', 1), 0);
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  assert.equal(session.getPlacedCount('uranium', 1), 0);
+  session.runCommand({ type: 'PLACE_PART_PAID', payload: { row: 0, col: 1, id: 'uranium1' } });
+  assert.equal(session.getPlacedCount('uranium', 1), 1);
+  session.incrementPlacedCount('uranium', 1);
+  assert.equal(session.getPlacedCount('uranium', 1), 2);
+  const rebuilt = session.rebuildPlacedCounts();
+  assert.equal(rebuilt['uranium:1'], 2);
+  assert.equal(session.getPlacedCount('uranium', 1), 2);
+  session.reboot({ keepEp: true });
+  assert.equal(session.getPlacedCount('uranium', 1), 0);
+});
+
+test('getActiveParts classifies grid components by category', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  assert.equal(session.placeComponent(0, 1, 'vent1'), true);
+  assert.equal(session.placeComponent(1, 0, 'heat_exchanger1'), true);
+  assert.equal(session.placeComponent(1, 1, 'capacitor1'), true);
+  const parts = session.getActiveParts();
+  assert.equal(parts.active_cells.length, 1);
+  assert.equal(parts.active_cells[0].id, 'uranium1');
+  assert.equal(parts.cells, parts.active_cells);
+  assert.ok(parts.active_vents.some((p) => p.id === 'vent1'));
+  assert.ok(parts.active_exchangers.some((p) => p.id === 'heat_exchanger1'));
+  assert.ok(parts.active_capacitors.some((p) => p.id === 'capacitor1'));
+  assert.ok(parts.active_vessels.length >= 2);
+  assert.equal(session.classifyActivePart(0, 0).cells, true);
+  assert.equal(session.getActivePartList('active_vents').length, 1);
 });

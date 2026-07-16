@@ -33,6 +33,7 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
     : ['preTick', 'environment', 'generateHeat', 'destroy', 'enrich', 'meltdown'];
 
   let pipeline = null;
+  let pipelineStages = defaultStages;
 
   function buildCtx(overrides = {}) {
     return {
@@ -78,7 +79,8 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
   }
 
   function setPipeline(stages) {
-    pipeline = createPipeline(stages, runners);
+    pipelineStages = Array.isArray(stages) ? [...stages] : defaultStages;
+    pipeline = createPipeline(pipelineStages, runners);
   }
 
   setPipeline(defaultStages);
@@ -89,9 +91,36 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
     get allFuelRodsDepleted() { return allFuelRodsDepleted; },
 
     setPipeline,
+    getPipelineStages: () => [...pipelineStages],
     setLoopOrder: (legacy) => { legacyLoopOrder = !!legacy; },
     setActive: (value) => { active = value; },
     setEnvironment: (env) => { currentEnvironment = env; },
+    setLastCellOutputs(outputs) {
+      const copied = copyCellOutputs(outputs);
+      if (lastResult) {
+        lastResult.cellOutputs = copied;
+      } else {
+        lastResult = {
+          euOutput: grid.euOutput,
+          powerOutput: grid.powerOutput,
+          heatOutput: 0,
+          ventedHeat: grid.ventedHeat,
+          meltdown,
+          hullHeat: grid.currentHeat,
+          destroyedComponents: [],
+          enrichedCells: [],
+          failureState: systems.failure?.failureState,
+          hullIntegrity: systems.failure?.hullIntegrity,
+          hasMeltedDown: systems.failure?.hasMeltedDown,
+          gracePeriodTicks: systems.failure?.gracePeriodTicks,
+          cellOutputs: copied,
+          heatTransfers: [],
+          heatFlowVectors: Object.freeze([]),
+          unlockedAchievementIds: Object.freeze([]),
+        };
+      }
+      return copied;
+    },
 
     tick(overrides = {}) {
       if (meltdown) return engine.getLastResult();

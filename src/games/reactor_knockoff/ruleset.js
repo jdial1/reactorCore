@@ -30,8 +30,8 @@ export function createRuleset({ manifest }) {
       grid.recalculateCaps();
     },
 
-    onPrestige(session, { refundEp = false } = {}) {
-      if (!refundEp) session.systems.upgrades?.deserialize([]);
+    onPrestige(session, { refundEp = false, keepEp = true } = {}) {
+      if (refundEp || keepEp === false) session.systems.upgrades?.deserialize([]);
     },
   };
 }

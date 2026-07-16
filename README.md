@@ -235,15 +235,17 @@ Recorded from valve/exchanger transfers every tick. Accessors and snapshots retu
 
 ### Cell outputs (paused HUD / pulse display)
 
-Last tick `cellOutputs` (power, heat, pulse, pulseN, **reflectorCount**, heatBoost) persist on:
+**Do not** recompute tile pulse/power in the host via `computeCellOutput`. Core owns live-cell coverage:
 
 ```js
-session.getCellOutputs();
-session.engine.getLastCellOutputs();
-session.getSnapshot().cellOutputs; // alias lastCellOutputs
+session.getCellOutputs();           // last tick or last refresh
+session.getCellOutputAt(row, col);  // single tile
+session.refreshCellOutputs();       // non-mutating reproject (place/remove/recompile also call this)
+session.projectCellOutputs();       // same projection without writing engine state
+session.getSnapshot().cellOutputs;  // alias lastCellOutputs
 ```
 
-Use this instead of host-local pulse recompute. `countActiveReflectorNeighbors(grid, row, col)` is exported for tooltips.
+Each entry: `{ row, col, power, heat, pulse, pulseN, reflectorCount, heatBoost }`. Guaranteed for every live cell (`category === 'cell'`, `ticks > 0`) after each tick and after mid-UI grid sync (`placeComponent` / `removeComponent` / `recompileModifiers`).
 
 ### Snapshot net change
 
@@ -289,9 +291,116 @@ session.checkObjective(context);
 
 ### Tooltip / placement preview math
 
-Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting in the host.
+Prefer `session.getPart` / `compilePartStats` / `getPartDescription` / `getCellOutputs` for shop and tile tooltips. Keep string formatting in the host. Do **not** call `computeCellOutput` from host UI paths.
+
+`getPart` / `compilePartStats` expose shop `power` / `heat` / `heatBoost` (forceful_fusion / `heat_power_multiplier` × `log1000(currentHeat)`). Drop host `applyHeatPowerMultiplier`.
+
+### Pipeline stages
+
+```js
+session.getPipelineStages(); // e.g. revival: intents…achievements
+```
+
+### Objectives / stats contract
+
+Objective checks and `deriveReactorStats` use core cell coefficients. They must **not** require the host to write `inst.power` / `inst.heat` (layout overrides remain optional only).
+
+### Tick activity (L13 — adopt)
+
+```js
+session.hasTickActivity(); // live grid parts OR auto-sell with power>0 OR pending SELL_POWER/VENT_HEAT/SELL_PART
+```
+
+Host: delete `_hasSimulationActivity` / production `active_tiles` rebuilds. Keep part-classification test-only if needed.
+
+### Cell pulse tooltips (L14 — adopt)
+
+```js
+session.describeCellPulse(row, col);
+// { cellMultiplier, pulseN, pulse, reflectorCount, neighbors: [{ kind, contribution, ... }] }
+```
+
+Also exported: `computeNeighborPulseN`, `getCellOutputAt`. Host: delete tooltip pulse duplication.
+
+### Economy single owner (L15 / L16)
+
+Session economy is authoritative for money/EP. Mutate only via intents / session helpers; project host UI from snapshot after ticks:
+
+```js
+session.dispatch({ type: 'DEBIT_MONEY' | 'CREDIT_MONEY' | 'DEBIT_EP' | 'CREDIT_EP', payload: { amount } });
+session.dispatch({ type: 'GRANT_REWARD', payload: { money, ep } }); // or { reward } / { ep_reward }
+session.grantReward({ money, ep }); // objectives call this on complete
+session.loadEconomyState(data); // load/save ONLY — never each tick
+```
+
+**Delete** host `syncEconomyFromGame` / per-tick `economy.deserialize`, `rewards.js` Decimal writers, and prestige host EP credits (`session.prestige()` owns weave EP). Listen for `economyChanged` / `rewardGranted` or read `getSnapshot().economy`.
+
+### Upgrade UI source (L17)
+
+```js
+session.listUpgrades(); // level, nextLevel, cost, erequires, classList, canPurchase, …
+session.getUpgradeLevel(id);
+session.purchaseUpgrade(id); // sole runtime level mutation
+session.setUpgradeLevels(entries); // load / one-shot bridge bootstrap only
+```
+
+Drop host `UpgradeSet` level authority and bridge upgrade-level sync after bootstrap.
+
+### Session command queue (L18 — adopt)
+
+Session owns the intent/command queue. Host can delete `state.intent_queue` and push straight to session:
+
+```js
+session.dispatch({ type: 'SELL_POWER' });
+session.enqueueIntent({ action: 'PLACE_PART', payload: { row, col, partId } }); // partId → id
+session.runCommand({ type: 'VENT_HEAT' }); // enqueue + drain now
+session.drainCommands(); // apply pending outside tick
+session.peekCommands();
+session.clearCommands();
+session.pendingCommands;
+```
+
+`dispatch` / `enqueueIntent` accept `{ type }` or host `{ action }`, and normalize `partId` / `upgradeId` → `id`. Tick still drains via the `intents` stage; use `runCommand` / `drainCommands` for immediate UI ops (place/sell/power).
+
+### Placed counts (L18 — adopt)
+
+```js
+session.getPlacedCount(type, level);
+session.incrementPlacedCount(type, level); // UnlockManager counters
+session.rebuildPlacedCounts(); // from live grid (load / resync)
+session.setPlacedCounts(map); // hydrate from save
+session.clearPlacedCounts(); // prestige
+```
+
+`PLACE_PART` / `PLACE_PART_PAID` auto-increment on success. Direct `placeComponent` / blueprint apply do not (host parity). Prestige clears counts.
+
+### Active parts by category (L18 — adopt)
+
+```js
+const parts = session.getActiveParts();
+// parts.active_cells / .cells, .active_vents, .active_exchangers, …
+session.getActivePartList('active_cells');
+session.classifyActivePart(row, col);
+```
+
+Entries are `{ row, col, id, type, level, category, ticks, … }` (not host Tile objects). Drop `bridge-parts` / `Engine.active_*` rebuilds for sim queries.
 
 ## Changelog
+
+### 1.2.9
+
+Shop heat-power, cellOutputs sync, pipeline stages, tick/economy ownership:
+
+- Bake `heat_power` / forceful_fusion into `getPart` / `compilePartStats` shop `power` (+ `heatBoost`)
+- `projectCellOutputs` / `session.refreshCellOutputs` — every live cell covered mid-UI without host `computeCellOutput`
+- `session.getPipelineStages()`; objective/stats regression without `inst.power`/`inst.heat`
+- `session.hasTickActivity()` — live parts / auto-sell power / pending sell-vent intents
+- `session.describeCellPulse(row,col)` — structured pulse neighbor facts for tooltips
+- Economy intents + `grantReward` / `GRANT_REWARD`; objectives auto-grant; `loadEconomyState` load-only
+- `listUpgrades` richer catalog (`nextLevel`, `erequires`, `baseCost`); `getUpgradeLevel` / `setUpgradeLevels`
+- Session command queue: `enqueueIntent` / `runCommand` / `drainCommands` / `peekCommands` (delete host `intent_queue`)
+- `getPlacedCount` / `incrementPlacedCount` / `rebuildPlacedCounts` — UnlockManager counter ownership
+- `getActiveParts` / `getActivePartList` — replace `bridge-parts` / `Engine.active_*`
 
 ### 1.2.8
 

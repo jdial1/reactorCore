@@ -6,12 +6,13 @@ import { createTickEngine } from '../reactor/createTickEngine.js';
 import { createInstance } from '../reactor/createInstance.js';
 import { buildDefinitionsFromManifest } from '../reactor/behaviors/index.js';
 import { createCodecs, serializeSession, deserializeSession } from '../systems/codecs.js';
-import { createCommandBus, registerCommand } from '../systems/commands.js';
+import { createCommandBus, registerCommand, normalizeCommand } from '../systems/commands.js';
 import { createEventQueue } from '../systems/events.js';
 import { createOffline } from '../systems/automation.js';
 import { toNumber } from '../systems/decimal.js';
 import { compileMechanicsOverrides, CORE_MECHANICS_OVERRIDE_KEYS } from '../systems/mechanicsPolicy.js';
-import { buildContainmentSegments } from '../reactor/heat/containmentSegments.js';
+import { buildContainmentSegments, getHeatSegmentAt } from '../reactor/heat/containmentSegments.js';
+import { getTileFlowDiagnostics } from '../reactor/heat/heatFlowDiagnostics.js';
 import { deriveReactorStats } from '../systems/reactorStats.js';
 import {
   computeAbsoluteLayoutCost,
@@ -24,11 +25,21 @@ import {
 } from '../systems/blueprint.js';
 import { projectModifiersForHost } from '../systems/modifierProjection.js';
 import { isValidGridCoord } from '../kernel/gridUtils.js';
-import { listCompiledParts, getCompiledPart } from '../systems/partCatalog.js';
+import { listCompiledParts, getCompiledPart, compilePartStats } from '../systems/partCatalog.js';
+import { getPartDescription } from '../systems/partDescription.js';
 import { resolvePartDisplayRates, resolveDisplayRates } from '../reactor/heat/effectiveRates.js';
 import { previewPrestige, calculateWeaveEp } from '../systems/prestige.js';
 import { resolveEpHeat } from '../systems/epHeat.js';
 import { partAutoReplaceCost } from '../systems/mechanicsPolicy.js';
+import {
+  getPlacedCount as readPlacedCount,
+  incrementPlacedCount as bumpPlacedCount,
+  rebuildPlacedCountsFromGrid,
+  clearPlacedCounts,
+} from '../systems/placedCounts.js';
+import { deriveActiveParts, getActivePartList, classifyActivePart } from '../systems/activeParts.js';
+import { runBatchTicks } from './runBatchTicks.js';
+import { projectCellOutputs, describeCellPulse } from '../reactor/phases/cellPhase.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -74,14 +85,30 @@ export async function createGameLoader(gameId) {
   return { manifest, ruleset };
 }
 
+function notePlacementCount(session, id) {
+  const def = session.registry?.get?.(id)
+    || session.manifest?.components?.find((component) => component.id === id);
+  if (!def?.type) return;
+  session.incrementPlacedCount?.(def.type, def.level ?? 1);
+}
+
 function registerDefaultCommands() {
   registerCommand('PLACE_PART', (session, payload = {}) => {
     const { row, col, id, paid = false, policy } = payload;
-    if (paid) return session.placeComponentPaid(row, col, id, policy);
-    return session.placeComponent(row, col, id);
+    if (paid) {
+      const result = session.placeComponentPaid(row, col, id, policy);
+      if (result?.ok) notePlacementCount(session, id);
+      return result;
+    }
+    const placed = session.placeComponent(row, col, id);
+    if (placed) notePlacementCount(session, id);
+    return placed;
   });
-  registerCommand('PLACE_PART_PAID', (session, { row, col, id, policy } = {}) =>
-    session.placeComponentPaid(row, col, id, policy));
+  registerCommand('PLACE_PART_PAID', (session, { row, col, id, policy } = {}) => {
+    const result = session.placeComponentPaid(row, col, id, policy);
+    if (result?.ok) notePlacementCount(session, id);
+    return result;
+  });
   registerCommand('REMOVE_PART', (session, { row, col }) => { session.removeComponent(row, col); return true; });
   registerCommand('PURCHASE_UPGRADE', (session, { id }) => session.purchaseUpgrade(id));
   registerCommand('SELL_POWER', (session) => {
@@ -93,7 +120,7 @@ function registerDefaultCommands() {
     const economy = session.systems.economy;
     const prestige = economy?.getPrestigeMultiplier?.() ?? 1;
     const income = sold * prestige * sellPriceMultiplier;
-    economy?.addMoney(income);
+    if (income > 0) session.creditMoney?.(income) ?? economy?.addMoney(income);
     economy?.recordManualPowerSold?.(sold);
     session.events?.emit('sellPower', { amount: sold });
     return sold;
@@ -143,27 +170,28 @@ function registerDefaultCommands() {
       computeSellValue: policy?.computeSellValue || session.sellValuePolicy,
     });
     session.removeComponent(row, col);
-    if (sellValue > 0) session.systems.economy?.addMoney(sellValue);
+    if (sellValue > 0) {
+      session.creditMoney?.(sellValue) ?? session.systems.economy?.addMoney(sellValue);
+    }
     session.events?.emit('partSold', { row, col, value: sellValue });
     return sellValue;
   });
-  registerCommand('DEBIT_MONEY', (session, { amount }) => {
-    if (!session.systems.economy) return false;
-    return session.systems.economy.spendMoney(amount);
-  });
-  registerCommand('CREDIT_MONEY', (session, { amount }) => {
-    if (!session.systems.economy) return false;
-    session.systems.economy.addMoney(amount);
-    return true;
-  });
+  registerCommand('DEBIT_MONEY', (session, { amount }) => session.debitMoney?.(amount) ?? false);
+  registerCommand('CREDIT_MONEY', (session, { amount }) => session.creditMoney?.(amount) ?? false);
+  registerCommand('DEBIT_EP', (session, { amount }) => session.debitExoticParticles?.(amount) ?? false);
+  registerCommand('CREDIT_EP', (session, { amount }) => session.creditExoticParticles?.(amount) ?? false);
+  registerCommand('GRANT_REWARD', (session, payload = {}) => session.grantReward?.(payload) ?? false);
   registerCommand('DEBIT_LAYOUT_COST', (session, { money = 0, ep = 0 }) => {
-    const economy = session.systems.economy;
-    if (!economy) return false;
-    if (money > 0 && !economy.spendMoney(money)) return false;
-    if (ep > 0 && !economy.spendExoticParticles?.(ep)) return false;
+    if (money > 0 && session.debitMoney && !session.debitMoney(money)) return false;
+    if (ep > 0 && session.debitExoticParticles && !session.debitExoticParticles(ep)) {
+      if (money > 0) session.creditMoney?.(money);
+      return false;
+    }
     return true;
   });
 }
+
+const TICK_ACTIVITY_INTENTS = new Set(['SELL_POWER', 'VENT_HEAT', 'SELL_PART', 'GRANT_REWARD']);
 
 let commandsRegistered = false;
 
@@ -210,6 +238,41 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     };
   }
 
+  function refreshCellOutputs() {
+    const outputs = projectCellOutputs(session);
+    engine.setLastCellOutputs?.(outputs);
+    return outputs;
+  }
+
+  function emitEconomyChanged(reason, extra = {}) {
+    const economy = systems.economy;
+    if (!economy) return;
+    events.emit('economyChanged', {
+      reason,
+      money: toNumber(economy.money),
+      currentExoticParticles: toNumber(economy.currentExoticParticles),
+      totalExoticParticles: toNumber(economy.totalExoticParticles),
+      ...extra,
+    });
+  }
+
+  function hasLiveComponents() {
+    let found = false;
+    grid.forEach((_, __, inst) => {
+      if (found || !inst || inst.pendingDestruction) return;
+      found = true;
+    });
+    return found;
+  }
+
+  function hasTickActivity() {
+    if (hasLiveComponents()) return true;
+    const autoSell = !!(toggles.auto_sell || mechanicsOverrides.autoSellFromUpgrade);
+    if (autoSell && (grid.currentPower || 0) > 0) return true;
+    if (commands.hasPendingOfTypes?.(TICK_ACTIVITY_INTENTS)) return true;
+    return false;
+  }
+
   function recompileModifiers() {
     modifiers = systems.upgrades?.compileModifiers() || {};
     const definitions = buildDefinitionsFromManifest(manifest, modifiers);
@@ -221,6 +284,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     });
     grid.recalculateCaps();
     syncMechanicsOverrides(modifiers);
+    refreshCellOutputs();
   }
 
   const definitions = buildDefinitionsFromManifest(manifest, modifiers);
@@ -278,6 +342,85 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     listUpgrades: () => systems.upgrades?.listDisplayCatalog?.(session) ?? [],
     listParts: () => listCompiledParts(session),
     getPart: (id) => getCompiledPart(session, id),
+    getPartDescription: (id, opts = {}) => getPartDescription(session, id, opts),
+    compilePartStats: (partId, options = {}) => compilePartStats(partId, {
+      manifest,
+      registry,
+      modifiers: options.modifiers ?? modifiers,
+      exoticParticles: options.exoticParticles ?? systems.economy?.currentExoticParticles,
+      weaveQuantum: options.weaveQuantum
+        ?? systems.economy?.weaveQuantum
+        ?? manifest.economy?.weaveQuantum,
+      currentHeat: options.currentHeat ?? grid.currentHeat,
+      heatPowerMultiplier: options.heatPowerMultiplier
+        ?? mechanicsOverrides.heatPowerMultiplier
+        ?? modifiers.heatPowerMultiplier
+        ?? 0,
+      protiumParticles: options.protiumParticles ?? systems.economy?.protiumParticles ?? 0,
+      ...options,
+    }),
+    getHeatSegmentAt: (row, col) => getHeatSegmentAt(grid, row, col, { modifiers }),
+    getTileFlowDiagnostics: (row, col) => getTileFlowDiagnostics(grid, row, col, { modifiers }),
+    getPipelineStages: () => engine.getPipelineStages?.()
+      ?? (ruleset.createPipeline?.()?.stages ? [...ruleset.createPipeline().stages] : []),
+    projectCellOutputs: () => projectCellOutputs(session),
+    refreshCellOutputs,
+    hasTickActivity,
+    describeCellPulse: (row, col) => describeCellPulse(grid, row, col),
+    debitMoney(amount) {
+      if (!systems.economy) return false;
+      const ok = systems.economy.spendMoney(amount);
+      if (ok) emitEconomyChanged('debit_money', { amount: toNumber(amount) });
+      return ok;
+    },
+    creditMoney(amount) {
+      if (!systems.economy) return false;
+      systems.economy.addMoney(amount);
+      emitEconomyChanged('credit_money', { amount: toNumber(amount) });
+      return true;
+    },
+    debitExoticParticles(amount) {
+      if (!systems.economy?.spendExoticParticles) return false;
+      const ok = systems.economy.spendExoticParticles(amount);
+      if (ok) emitEconomyChanged('debit_ep', { amount: toNumber(amount) });
+      return ok;
+    },
+    creditExoticParticles(amount) {
+      if (!systems.economy?.addExoticParticles) return false;
+      systems.economy.addExoticParticles(amount);
+      emitEconomyChanged('credit_ep', { amount: toNumber(amount) });
+      return true;
+    },
+    grantReward(payload = {}) {
+      const moneyAmt = toNumber(
+        payload.money != null ? payload.money
+          : payload.reward != null ? payload.reward
+            : 0,
+      );
+      const epAmt = toNumber(
+        payload.ep != null ? payload.ep
+          : payload.ep_reward != null ? payload.ep_reward
+            : 0,
+      );
+      if (!(moneyAmt > 0) && !(epAmt > 0)) return false;
+      if (moneyAmt > 0) session.creditMoney(moneyAmt);
+      if (epAmt > 0) session.creditExoticParticles(epAmt);
+      events.emit('rewardGranted', { money: moneyAmt, ep: epAmt });
+      emitEconomyChanged('grant_reward', { money: moneyAmt, ep: epAmt });
+      return { ok: true, money: moneyAmt, ep: epAmt };
+    },
+    getEconomySnapshot() {
+      return systems.economy?.serialize?.() ?? null;
+    },
+    loadEconomyState(data) {
+      systems.economy?.deserialize?.(data);
+      emitEconomyChanged('load');
+    },
+    getUpgradeLevel: (id) => systems.upgrades?.getLevel?.(id) ?? 0,
+    setUpgradeLevels(entries) {
+      systems.upgrades?.deserialize?.(entries);
+      recompileModifiers();
+    },
     isUpgradeAvailable: (id) => systems.upgrades?.isAvailable?.(id, session) ?? false,
     getObjectiveProgress: (context = {}) => systems.objectives?.getCurrentProgress?.(session, context)
       ?? { completed: false, percent: 0, text: '' },
@@ -336,7 +479,50 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     projectModifiers: () => projectModifiersForHost(modifiers),
     getHeatFlowVectors: () => engine.getLastHeatFlowVectors?.() ?? Object.freeze([]),
     getCellOutputs: () => engine.getLastCellOutputs?.() ?? Object.freeze([]),
+    getCellOutputAt: (row, col) => {
+      const outputs = engine.getLastCellOutputs?.() ?? [];
+      return outputs.find((o) => o.row === row && o.col === col) || null;
+    },
     dispatch: (command) => commands.enqueue(command),
+    enqueueIntent: (intent) => commands.enqueue(intent),
+    drainCommands: () => commands.drain(session),
+    peekCommands: () => commands.peek(),
+    clearCommands: () => { commands.clear(); },
+    get pendingCommands() { return commands.pending; },
+    runCommand(command) {
+      const normalized = normalizeCommand(command);
+      if (!normalized || !commands.enqueue(normalized)) {
+        return { ok: false, result: null, applied: [] };
+      }
+      const applied = commands.drain(session);
+      const entry = applied.find((item) => item.type === normalized.type) ?? applied[applied.length - 1];
+      const result = entry?.result;
+      const ok = result !== false && result != null && result?.ok !== false;
+      return { ok, result: result ?? null, applied };
+    },
+    getPlacedCount: (type, level) => readPlacedCount(session.placedCounts, type, level),
+    incrementPlacedCount(type, level, amount = 1) {
+      session.placedCounts = bumpPlacedCount(session.placedCounts || {}, type, level, amount);
+      return session.placedCounts[`${type}:${level ?? 1}`] || 0;
+    },
+    rebuildPlacedCounts() {
+      session.placedCounts = rebuildPlacedCountsFromGrid(grid);
+      return { ...session.placedCounts };
+    },
+    setPlacedCounts(counts = {}) {
+      session.placedCounts = { ...(counts || {}) };
+      return { ...session.placedCounts };
+    },
+    clearPlacedCounts() {
+      clearPlacedCounts(session.placedCounts);
+      return session.placedCounts;
+    },
+    getActiveParts: () => deriveActiveParts(grid),
+    getActivePartList: (key) => getActivePartList(grid, key),
+    classifyActivePart: (row, col) => {
+      const inst = grid.getComponentAt(row, col);
+      return classifyActivePart(inst, { row, col, grid });
+    },
     drainEvents: () => events.drain(),
     recompileModifiers,
     sellValuePolicy: null,
@@ -373,12 +559,32 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
 
     runOffline: (elapsedMs) => offlineSystem.runOffline(session, elapsedMs),
 
+    async *catchupGenerator(totalTicks, chunkSize = 10000) {
+      let remaining = Math.max(0, Math.floor(Number(totalTicks) || 0));
+      const size = Math.max(1, Math.floor(Number(chunkSize) || 10000));
+      let processed = 0;
+      isCatchingUp = true;
+      try {
+        while (remaining > 0) {
+          const batch = Math.min(size, remaining);
+          runBatchTicks(session, batch, { collectEvents: false, drainEvents: false });
+          processed += batch;
+          remaining -= batch;
+          yield { processed, remaining, ticksProcessed: processed };
+          await Promise.resolve();
+        }
+      } finally {
+        isCatchingUp = false;
+      }
+    },
+
     purchaseUpgrade(id) {
       if (!systems.upgrades || !systems.economy) return false;
       if (systems.failure?.hasMeltedDown || engine.meltdown) return false;
       const result = systems.upgrades.purchase(id, systems.economy, session);
       if (!result?.ok) return false;
       recompileModifiers();
+      emitEconomyChanged('purchase_upgrade', { id, spent: result.spent });
       events.emit('upgradePurchased', {
         id,
         newLevel: result.newLevel,
@@ -389,8 +595,9 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
 
     reboot(options = {}) {
       if (!systems.economy) return 0;
-      const keepEp = options.keepEp != null ? !!options.keepEp : !options.refundEp;
-      const resolved = { ...options, keepEp, refundEp: options.refundEp === true };
+      const refundEp = options.refundEp === true;
+      const keepEp = options.keepEp != null ? !!options.keepEp : !refundEp;
+      const resolved = { ...options, keepEp, refundEp };
       let activeCells = 0;
       grid.forEach((_, __, inst) => {
         if (inst?.definition?.category === 'cell' && inst.ticks > 0) activeCells++;
@@ -400,7 +607,9 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         fuelCellCount: activeCells,
         sessionPowerProduced: toNumber(systems.economy.sessionPowerProduced),
         sessionHeatDissipated: toNumber(systems.economy.sessionHeatDissipated),
-        earned: systems.economy.calculatePrestigeReward?.() ?? 0,
+        earned: keepEp && !refundEp
+          ? (systems.economy.calculatePrestigeReward?.() ?? 0)
+          : 0,
         weaveQuantum: systems.economy.weaveQuantum ?? manifest.economy?.weaveQuantum ?? 1_000_000,
       };
       const earned = systems.economy.reboot(resolved);
@@ -408,14 +617,17 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       grid.resetHeat();
       grid.resetPower();
       engine.reset();
-      if (session.placedCounts) {
-        for (const key of Object.keys(session.placedCounts)) session.placedCounts[key] = 0;
-      }
+      clearPlacedCounts(session.placedCounts);
+
       ruleset.onPrestige?.(session, resolved);
       recompileModifiers();
       events.emit('reboot', { earned, options: resolved, ...prestigePayload });
-      if (keepEp) events.emit('prestigeCompleted', { ...prestigePayload, earned });
+      if (keepEp && !refundEp) events.emit('prestigeCompleted', { ...prestigePayload, earned });
       return earned;
+    },
+
+    reset(options = {}) {
+      return session.reboot(options);
     },
 
     prestige(options = {}) {
@@ -428,6 +640,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       if (!inst) return false;
       grid.setComponentAt(row, col, inst);
       grid.recalculateCaps();
+      refreshCellOutputs();
       events.emit('partPlaced', { row, col, id });
       return true;
     },
@@ -450,17 +663,17 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       if (cost.money > 0 && toNumber(economy.money) < cost.money) {
         return { ok: false, reason: 'funds', cost, id, row, col };
       }
-      if (cost.ep > 0 && !economy.spendExoticParticles?.(cost.ep)) {
+      if (cost.ep > 0 && !session.debitExoticParticles(cost.ep)) {
         return { ok: false, reason: 'funds', cost, id, row, col };
       }
-      if (cost.money > 0 && !economy.spendMoney(cost.money)) {
-        if (cost.ep > 0) economy.addExoticParticles?.(cost.ep);
+      if (cost.money > 0 && !session.debitMoney(cost.money)) {
+        if (cost.ep > 0) session.creditExoticParticles(cost.ep);
         return { ok: false, reason: 'funds', cost, id, row, col };
       }
       const placed = session.placeComponent(row, col, id);
       if (!placed) {
-        if (cost.ep > 0) economy.addExoticParticles?.(cost.ep);
-        if (cost.money > 0) economy.addMoney(cost.money);
+        if (cost.ep > 0) session.creditExoticParticles(cost.ep);
+        if (cost.money > 0) session.creditMoney(cost.money);
         return { ok: false, reason: 'place_failed', cost, id, row, col };
       }
       events.emit('partPurchased', { row, col, id, cost });
@@ -471,6 +684,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       if (!isValidGridCoord(row, col, grid)) return;
       grid.setComponentAt(row, col, null);
       grid.recalculateCaps();
+      refreshCellOutputs();
       events.emit('partRemoved', { row, col });
     },
 

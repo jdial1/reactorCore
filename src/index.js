@@ -11,13 +11,26 @@ export { createInstance, cloneInstance, preTick, isBroken } from './engine/react
 export { createEconomy } from './engine/systems/economy.js';
 export { createUpgradeStore } from './engine/systems/upgrades.js';
 export { compileMechanicsOverrides, buildAutoReplaceCosts, partAutoReplaceCost, isPartPerpetual, CAPACITOR_AUTO_REPLACE_MULTIPLIER, PERPETUAL_AUTO_REPLACE_MULTIPLIER } from './engine/systems/mechanicsPolicy.js';
-export { listCompiledParts, getCompiledPart, projectCompiledPart } from './engine/systems/partCatalog.js';
+export { listCompiledParts, getCompiledPart, projectCompiledPart, compilePartStats } from './engine/systems/partCatalog.js';
+export { formatPartDescription, getPartDescription } from './engine/systems/partDescription.js';
 export { resolveEpHeat, CATALYST_REDUCTION_CAP, DEFAULT_WEAVE_QUANTUM } from './engine/systems/epHeat.js';
 export { calculateWeaveEp, previewPrestige } from './engine/systems/prestige.js';
 export { createAutomation, createOffline } from './engine/systems/automation.js';
 export { serializeSession, deserializeSession } from './engine/systems/codecs.js';
 export { createSaveCodec } from './engine/systems/save.js';
-export { createCommandBus, registerCommand } from './engine/systems/commands.js';
+export { createCommandBus, registerCommand, normalizeCommand } from './engine/systems/commands.js';
+export {
+  getPlacedCount,
+  incrementPlacedCount,
+  rebuildPlacedCountsFromGrid,
+  clearPlacedCounts,
+  placedCountKey,
+} from './engine/systems/placedCounts.js';
+export {
+  deriveActiveParts,
+  getActivePartList,
+  classifyActivePart,
+} from './engine/systems/activeParts.js';
 export { createEventQueue } from './engine/systems/events.js';
 export { toDecimal, toNumber, serializeDecimal, deserializeDecimal } from './engine/systems/decimal.js';
 export { toNum, isValidGridCoord, countById, neighborInstances, createSustainedTracker, CARDINAL_OFFSETS } from './engine/kernel/gridUtils.js';
@@ -30,6 +43,8 @@ export {
   runCellPhase,
   computeCellOutput,
   resolveCellCoefficients,
+  projectCellOutputs,
+  describeCellPulse,
 } from './engine/reactor/phases/cellPhase.js';
 export { runHeatPipeline, runVentPhase, heatTransfersToVectors, copyHeatFlowVectors } from './engine/reactor/heat/heatPipeline.js';
 export {
@@ -41,7 +56,8 @@ export {
   resolvePartDisplayRates,
   sumCategoryLevels,
 } from './engine/reactor/heat/effectiveRates.js';
-export { buildContainmentSegments } from './engine/reactor/heat/containmentSegments.js';
+export { buildContainmentSegments, getHeatSegmentAt } from './engine/reactor/heat/containmentSegments.js';
+export { getTileFlowDiagnostics } from './engine/reactor/heat/heatFlowDiagnostics.js';
 export { collectOverpressureExplosions, explodeComponent, applyHullRepulsion } from './engine/reactor/explosions.js';
 export { runReactorMechanicsPhase } from './engine/reactor/reactorMechanics.js';
 export {

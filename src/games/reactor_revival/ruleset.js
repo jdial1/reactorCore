@@ -82,10 +82,10 @@ export function createRuleset({ manifest }) {
       systems.failure?.reset?.();
     },
 
-    onPrestige(session, { refundEp = false } = {}) {
+    onPrestige(session, { refundEp = false, keepEp = true } = {}) {
       const upgrades = session.systems.upgrades;
       if (upgrades) {
-        if (refundEp) {
+        if (refundEp || keepEp === false) {
           upgrades.deserialize([]);
         } else {
           const kept = upgrades.serialize().filter((entry) => {

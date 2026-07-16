@@ -77,11 +77,15 @@ export function buildContainmentSegments(grid, options = {}) {
     let totalContainment = 0;
     let totalVentRate = 0;
     let totalTransferRate = 0;
+    let totalOutletRate = 0;
+    let totalInletRate = 0;
     for (const tile of tiles) {
       totalHeat += tile.heat;
       totalContainment += tile.containment;
       totalVentRate += tile.ventRate;
       totalTransferRate += tile.transferRate;
+      if (tile.category === 'heat_outlet') totalOutletRate += tile.transferRate;
+      if (tile.category === 'heat_inlet') totalInletRate += tile.transferRate;
     }
     return {
       tiles,
@@ -89,8 +93,40 @@ export function buildContainmentSegments(grid, options = {}) {
       totalContainment,
       totalVentRate,
       totalTransferRate,
+      totalOutletRate,
+      totalInletRate,
       pressure: totalContainment > 0 ? totalHeat / totalContainment : 0,
       fullness: totalContainment > 0 ? totalHeat / totalContainment : 0,
     };
   });
+}
+
+export function getHeatSegmentAt(grid, row, col, options = {}) {
+  const segments = buildContainmentSegments(grid, options);
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const tiles = seg.tiles || [];
+    for (let j = 0; j < tiles.length; j++) {
+      const t = tiles[j];
+      if (t.row === row && t.col === col) {
+        return {
+          fullnessRatio: seg.fullness ?? seg.pressure ?? 0,
+          pressure: seg.pressure ?? 0,
+          totalHeat: seg.totalHeat ?? 0,
+          totalContainment: seg.totalContainment ?? 0,
+          totalVentRate: seg.totalVentRate ?? 0,
+          totalTransferRate: seg.totalTransferRate ?? 0,
+          totalOutletRate: seg.totalOutletRate ?? 0,
+          totalInletRate: seg.totalInletRate ?? 0,
+          tiles: tiles.map((node) => ({
+            row: node.row,
+            col: node.col,
+            category: node.category,
+            id: node.id,
+          })),
+        };
+      }
+    }
+  }
+  return null;
 }

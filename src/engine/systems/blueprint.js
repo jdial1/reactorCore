@@ -129,22 +129,22 @@ export function computeAbsoluteLayoutCost(session, layout, policy = {}) {
   return { breakdown, items };
 }
 
-function checkAffordability(session, breakdown, sellCredit = 0) {
+function checkAffordability(session, breakdown, sellCredit = 0, balances = null) {
   const economy = session.systems.economy;
-  if (!economy) return null;
+  if (!economy && !balances) return null;
   const netMoney = breakdown.money - sellCredit;
-  const money = toNum(economy.money);
-  const ep = toNum(economy.currentExoticParticles);
+  const money = balances?.money != null ? toNum(balances.money) : toNum(economy?.money);
+  const ep = balances?.ep != null ? toNum(balances.ep) : toNum(economy?.currentExoticParticles);
   const moneyShort = netMoney > money ? netMoney - money : 0;
   const epShort = breakdown.ep > ep ? breakdown.ep - ep : 0;
   if (moneyShort > 0 || epShort > 0) return { moneyShort, epShort };
   return null;
 }
 
-export function filterAffordablePlacements(session, placements, sellCredit = 0, policy = {}) {
+export function filterAffordablePlacements(session, placements, sellCredit = 0, policy = {}, balances = null) {
   const economy = session.systems?.economy;
-  let money = toNum(economy?.money) + sellCredit;
-  let ep = toNum(economy?.currentExoticParticles);
+  let money = (balances?.money != null ? toNum(balances.money) : toNum(economy?.money)) + sellCredit;
+  let ep = balances?.ep != null ? toNum(balances.ep) : toNum(economy?.currentExoticParticles);
   const affordable = [];
   for (let i = 0; i < placements.length; i++) {
     const entry = placements[i];
@@ -164,7 +164,8 @@ export function filterAffordablePlacements(session, placements, sellCredit = 0, 
 export function previewPartialBlueprint(session, targetLayout, options = {}, policy = {}) {
   const diff = computeBlueprintDiff(session, targetLayout, policy);
   const sellCredit = options.sellCredit ?? 0;
-  const affordable = filterAffordablePlacements(session, diff.toPlace, sellCredit, policy);
+  const balances = options.balances || null;
+  const affordable = filterAffordablePlacements(session, diff.toPlace, sellCredit, policy, balances);
   const affordableKeys = new Set(affordable.map((p) => `${p.r},${p.c}`));
   const deferred = diff.toPlace.filter((p) => !affordableKeys.has(`${p.r},${p.c}`));
   const affordableBreakdown = affordable.reduce(
@@ -176,13 +177,16 @@ export function previewPartialBlueprint(session, targetLayout, options = {}, pol
     },
     { money: 0, ep: 0 },
   );
+  const deficit = checkAffordability(session, diff.breakdown, sellCredit, balances);
+  const hasCost = (diff.breakdown?.money > 0) || (diff.breakdown?.ep > 0);
   return {
     ...diff,
     affordable,
     deferred,
     sellCredit,
     affordableBreakdown,
-    deficit: checkAffordability(session, diff.breakdown, sellCredit),
+    deficit,
+    canAfford: hasCost && deficit == null,
   };
 }
 

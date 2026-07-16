@@ -141,13 +141,20 @@ export function createRevivalEconomy(manifest) {
       return 1 + Math.min(ep * perEp, cap);
     },
 
-    reboot({ refundEp = false } = {}) {
-      const earned = this.calculatePrestigeReward();
+    reboot({ refundEp = false, keepEp = true } = {}) {
+      let earned = 0;
       if (refundEp) {
+        earned = this.calculatePrestigeReward();
         currentExoticParticles = totalExoticParticles;
-      } else if (earned > 0) {
-        currentExoticParticles = currentExoticParticles.add(earned);
-        totalExoticParticles = totalExoticParticles.add(earned);
+      } else if (keepEp === false) {
+        currentExoticParticles = toDecimal(0);
+        totalExoticParticles = toDecimal(0);
+      } else {
+        earned = this.calculatePrestigeReward();
+        if (earned > 0) {
+          currentExoticParticles = currentExoticParticles.add(earned);
+          totalExoticParticles = totalExoticParticles.add(earned);
+        }
       }
       money = toDecimal(economyDef.baseMoney || 0);
       sessionPowerProduced = toDecimal(0);

@@ -57,11 +57,16 @@ export function createEconomy(manifest) {
       return Math.pow(min / 1e12, 0.60206);
     },
 
-    reboot({ refundEp = false } = {}) {
-      const earned = this.calculatePrestigeReward();
+    reboot({ refundEp = false, keepEp = true } = {}) {
+      let earned = 0;
       if (refundEp) {
+        earned = this.calculatePrestigeReward();
         currentExoticParticles = totalExoticParticles;
+      } else if (keepEp === false) {
+        currentExoticParticles = 0;
+        totalExoticParticles = 0;
       } else {
+        earned = this.calculatePrestigeReward();
         currentExoticParticles += earned;
         totalExoticParticles += earned;
       }

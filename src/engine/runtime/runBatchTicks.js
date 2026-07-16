@@ -3,10 +3,12 @@ export function runBatchTicks(session, count, options = {}) {
   if (n === 0) return { ticksProcessed: 0, results: [], events: [] };
   const events = [];
   const collect = options.collectEvents !== false;
+  const drain = options.drainEvents !== false;
   if (collect && options.onEvent) {
     for (let i = 0; i < n; i++) {
       const result = session.tick();
-      events.push(...(session.drainEvents?.() || []));
+      const drained = drain ? (session.drainEvents?.() || []) : [];
+      events.push(...drained);
       if (result?.meltdown) break;
     }
     return { ticksProcessed: events.length ? session.engine.tickCount : n, results: [], events };
@@ -15,6 +17,6 @@ export function runBatchTicks(session, count, options = {}) {
   return {
     ticksProcessed: results.length,
     results,
-    events: session.drainEvents?.() || [],
+    events: drain ? (session.drainEvents?.() || []) : [],
   };
 }

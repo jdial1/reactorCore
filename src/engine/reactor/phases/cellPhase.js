@@ -42,11 +42,19 @@ function distributeHeatToNeighbors(grid, row, col, generatedHeat, validCount, of
   }
 }
 
-function processReflectorNeighbors(grid, row, col, multiplier, offsets = CARDINAL_OFFSETS) {
+function processReflectorNeighbors(grid, row, col, multiplier, offsets = CARDINAL_OFFSETS, pulsesOut = null) {
   for (const [dr, dc] of offsets) {
     const reflector = grid.getComponentAt(row + dr, col + dc);
     if (!reflector || reflector.definition.category !== 'reflector') continue;
     if (reflector.ticks > 0) {
+      if (pulsesOut) {
+        pulsesOut.push({
+          reflectorRow: row + dr,
+          reflectorCol: col + dc,
+          cellRow: row,
+          cellCol: col,
+        });
+      }
       reflector.ticks -= multiplier;
       reflector.currentDamage = (reflector.definition.baseTicks || reflector.definition.maxDamage) - reflector.ticks;
     }
@@ -136,6 +144,7 @@ export function runCellPhase(ctx, policy = {}) {
   const heatBoost = heatPowerMultiplier(heatPowerMult, grid.currentHeat || 0);
   const protiumParticles = ctx.economy?.protiumParticles ?? ctx.session?.systems?.economy?.protiumParticles ?? 0;
   const cellOutputs = [];
+  const reflectorPulses = [];
   const coeffOptions = {
     modifiers,
     protiumParticles,
@@ -169,7 +178,7 @@ export function runCellPhase(ctx, policy = {}) {
     inst._heatGenerated = generatedHeat;
     inst.ticks -= multiplier;
     inst.currentDamage = (def.maxDamage || Math.floor(def.baseTicks) || 0) - inst.ticks;
-    processReflectorNeighbors(grid, row, col, multiplier);
+    processReflectorNeighbors(grid, row, col, multiplier, CARDINAL_OFFSETS, reflectorPulses);
     cellOutputs.push({
       row,
       col,
@@ -186,8 +195,131 @@ export function runCellPhase(ctx, policy = {}) {
   if (active && powerAdd > 0) grid.addPowerRaw(powerAdd);
   if (heatAdd > 0) grid.adjustCurrentHeat(heatAdd);
 
+  if (reflectorPulses.length) {
+    const eventQueue = ctx.events || ctx.session?.events;
+    eventQueue?.emit?.('reflector_pulse', { pulses: reflectorPulses });
+  }
+
   ctx.result.heatOutput = (ctx.result.heatOutput || 0) + heatAdd;
   ctx.result.powerOutput = (ctx.result.powerOutput || 0) + powerAdd;
   ctx.result.cellOutputs = Object.freeze(cellOutputs.map((o) => Object.freeze({ ...o })));
   return { powerAdd, heatAdd, cellOutputs: ctx.result.cellOutputs };
+}
+
+export function describeCellPulse(grid, row, col) {
+  if (!grid?.getComponentAt) return null;
+  const inst = grid.getComponentAt(row, col);
+  if (!inst || inst.pendingDestruction || isBroken(inst)) return null;
+  const def = inst.definition;
+  if (def.category !== 'cell') return null;
+
+  const cellMultiplier = def.cellMultiplier ?? def.pulseMultiplier ?? 1;
+  const neighbors = [];
+  let pulseN = 0;
+  let reflectorCount = 0;
+
+  for (const [dr, dc] of CARDINAL_OFFSETS) {
+    const nr = row + dr;
+    const nc = col + dc;
+    const neighbor = grid.getComponentAt(nr, nc);
+    if (!neighbor || isBroken(neighbor) || neighbor.pendingDestruction) {
+      neighbors.push(Object.freeze({
+        row: nr, col: nc, kind: 'empty', contribution: 0,
+      }));
+      continue;
+    }
+    const ndef = neighbor.definition;
+    if (ndef.category === 'cell' && neighbor.ticks > 0) {
+      const contribution = ndef.cellCount || 1;
+      pulseN += contribution;
+      neighbors.push(Object.freeze({
+        row: nr,
+        col: nc,
+        kind: 'cell',
+        id: ndef.id,
+        cellCount: contribution,
+        ticks: neighbor.ticks,
+        contribution,
+      }));
+      continue;
+    }
+    if (ndef.category === 'reflector' && neighbor.ticks > 0) {
+      const contribution = reflectorPulseValue(ndef);
+      pulseN += contribution;
+      reflectorCount += 1;
+      neighbors.push(Object.freeze({
+        row: nr,
+        col: nc,
+        kind: 'reflector',
+        id: ndef.id,
+        powerIncrease: ndef.powerIncrease ?? 0,
+        neighborPulseValue: contribution,
+        ticks: neighbor.ticks,
+        contribution,
+      }));
+      continue;
+    }
+    neighbors.push(Object.freeze({
+      row: nr,
+      col: nc,
+      kind: ndef.category || 'other',
+      id: ndef.id,
+      contribution: 0,
+    }));
+  }
+
+  return Object.freeze({
+    row,
+    col,
+    id: def.id,
+    live: inst.ticks > 0,
+    ticks: inst.ticks,
+    cellMultiplier,
+    pulseN,
+    pulse: cellMultiplier + pulseN,
+    reflectorCount,
+    neighbors: Object.freeze(neighbors),
+  });
+}
+
+export function projectCellOutputs(session, options = {}) {
+  const grid = session?.grid;
+  if (!grid?.forEach) return Object.freeze([]);
+  const modifiers = options.modifiers || session.modifiers || {};
+  const overrides = options.mechanicsOverrides || session.mechanicsOverrides || {};
+  const reflectorCooling = overrides.reflectorCoolingFactor ?? modifiers.reflectorCoolingFactor ?? 0;
+  const heatPowerMult = overrides.heatPowerMultiplier ?? modifiers.heatPowerMultiplier ?? 0;
+  const heatBoost = heatPowerMultiplier(heatPowerMult, grid.currentHeat || 0);
+  const protiumParticles = options.protiumParticles
+    ?? session.systems?.economy?.protiumParticles
+    ?? 0;
+  const coeffOptions = {
+    modifiers,
+    protiumParticles,
+    honorHostEffective: false,
+  };
+  const cellOutputs = [];
+  grid.forEach((row, col, inst) => {
+    if (!inst || inst.pendingDestruction || isBroken(inst)) return;
+    const def = inst.definition;
+    if (def.category !== 'cell' || !(inst.ticks > 0)) return;
+    const reflectorCount = countActiveReflectorNeighbors(grid, row, col);
+    const m = def.cellMultiplier ?? def.pulseMultiplier ?? 1;
+    const n = computeNeighborPulseN(grid, row, col);
+    const pulse = m + n;
+    const { layoutPower, generatedHeat } = computeCellOutput(
+      def, null, pulse, reflectorCount, reflectorCooling, 1, coeffOptions,
+    );
+    cellOutputs.push(Object.freeze({
+      row,
+      col,
+      power: layoutPower * heatBoost,
+      heat: generatedHeat,
+      pulseN: n,
+      pulse,
+      reflectorCount,
+      heatBoost,
+    }));
+  });
+  return Object.freeze(cellOutputs);
 }
