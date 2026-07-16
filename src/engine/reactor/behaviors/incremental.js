@@ -36,10 +36,11 @@ export function buildIncrementalCell(spec, modifiers = {}) {
   const tickLevel = modifiers.cellTicksByType?.[partType] || 0;
   if (tickLevel > 0) baseTicks = Math.floor(baseTicks * Math.pow(2, tickLevel));
   const ticksMult = modifiers.cellTicksMultiplier || 1;
-  if (ticksMult !== 1) baseTicks = Math.max(1, Math.floor(baseTicks * ticksMult));
+  if (ticksMult !== 1) baseTicks = Math.max(1, baseTicks * ticksMult);
   if (partType === 'protium' && (modifiers.unstableProtiumLevel || 0) > 0) {
-    baseTicks = Math.max(1, Math.floor(baseTicks * Math.pow(0.5, modifiers.unstableProtiumLevel)));
+    baseTicks = Math.max(1, baseTicks * Math.pow(0.5, modifiers.unstableProtiumLevel));
   }
+  const tickLife = Math.max(1, Math.floor(baseTicks));
 
   const perpetual = !!(modifiers.perpetualPartIds?.[id] || spec.perpetual);
 
@@ -51,7 +52,7 @@ export function buildIncrementalCell(spec, modifiers = {}) {
     category: category || 'cell',
     displayName: title,
     maxHeat: 1,
-    maxDamage: baseTicks,
+    maxDamage: tickLife,
     basePower,
     baseHeat,
     baseTicks,
@@ -99,7 +100,7 @@ export function buildIncrementalCell(spec, modifiers = {}) {
       instance._powerGenerated = power;
       grid.addPower(power);
       instance.ticks -= 1;
-      instance.currentDamage = baseTicks - instance.ticks;
+      instance.currentDamage = tickLife - instance.ticks;
       if (instance.ticks <= 0) instance.pendingDestruction = true;
       return power;
     },
@@ -230,8 +231,9 @@ export function buildIncrementalCapacitor(spec, modifiers = {}) {
   const { id, title, category, autoSellPercent = 0, baseCost, extreme = false, level = 1 } = spec;
   const reactorPower = specStat(spec, 'reactorPower') || specStat(spec, 'power');
   const containment = specStat(spec, 'containment');
+  const reinforce = 1 + (modifiers.componentReinforcement || 0);
   const effectivePower = Math.floor(reactorPower * (modifiers.powerCapacity || 1));
-  const effectiveContainment = Math.floor(containment * (modifiers.heatCapacity || 1));
+  const effectiveContainment = Math.floor(containment * (modifiers.heatCapacity || 1) * reinforce);
 
   return createDef({
     id, name: id, title, category: category || 'capacitor', displayName: title,
@@ -245,7 +247,8 @@ export function buildIncrementalCapacitor(spec, modifiers = {}) {
 export function buildIncrementalCoolant(spec, modifiers = {}) {
   const { id, title, category, baseCost, extreme = false, heatTakePercent = 0 } = spec;
   const containment = specStat(spec, 'containment');
-  const effectiveContainment = Math.floor(containment * (modifiers.coolantCapacity || 1));
+  const reinforce = 1 + (modifiers.componentReinforcement || 0);
+  const effectiveContainment = Math.floor(containment * (modifiers.coolantCapacity || 1) * reinforce);
 
   return createDef({
     id, name: id, title, category: category || 'coolant_cell', displayName: title,
@@ -272,13 +275,15 @@ export function buildIncrementalPlating(spec, modifiers = {}) {
   const { id, title, category, baseCost, level = 1 } = spec;
   const reactorHeat = specStat(spec, 'reactorHeat') || specStat(spec, 'containment');
   const reactorPower = specStat(spec, 'reactorPower');
-  const heatMult = (modifiers.platingCapacity || 1) * (1 + (modifiers.platingHeatBonus || 0));
+  const reinforce = 1 + (modifiers.componentReinforcement || 0);
+  const heatMult = (modifiers.platingCapacity || 1) * (1 + (modifiers.platingHeatBonus || 0)) * reinforce;
   const effectiveHeat = Math.floor(reactorHeat * heatMult);
   const effectivePower = Math.floor(reactorPower * (modifiers.powerCapacity || 1));
 
   return createDef({
     id, name: id, title, category: category || 'reactor_plating', displayName: title,
     heatAdjustment: effectiveHeat,
+    reactorHeat: effectiveHeat,
     reactorPower: effectivePower,
     powerAdjustment: effectivePower,
     baseCost,

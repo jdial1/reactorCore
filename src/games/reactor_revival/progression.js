@@ -129,15 +129,16 @@ const INSTANT_CONDITIONS = {
   },
   simultaneous_explosions_10: (v) => v.tickExplosions === 10,
   criticality_recovery_auto(v, tracker) {
-    if (!tracker.recovery) tracker.recovery = { phase: 'idle', manualVentsAtEntry: 0 };
+    if (!tracker.recovery) tracker.recovery = { phase: 'idle', soldHeatCountAtEntry: 0 };
     const tr = tracker.recovery;
+    const soldHeatCount = v.soldHeatCount ?? 0;
     if (tr.phase === 'idle' && v.heatRatio > 1.5) {
       tr.phase = 'critical';
-      tr.manualVentsAtEntry = v.manualVents;
+      tr.soldHeatCountAtEntry = soldHeatCount;
       return false;
     }
     if (tr.phase !== 'critical') return false;
-    if (v.manualVents !== tr.manualVentsAtEntry) {
+    if (soldHeatCount > tr.soldHeatCountAtEntry) {
       tr.phase = 'idle';
       return false;
     }
@@ -310,17 +311,24 @@ export function createRevivalAchievements(manifest, { hooks } = {}) {
   const depletableIds = new Set(
     (manifest.components || []).filter((c) => (c.baseTicks || 0) > 0).map((c) => c.id),
   );
-  let manualVents = 0;
+  let soldHeatCount = 0;
+  let pairedSoldHeat = false;
   let lastMeltdown = false;
   let lastSnapshot = { activeCells: 0, powerProduced: 0, heatDissipated: 0 };
-  const trackers = {};
 
   const achievements = createAchievementSystem(manifest, {
     hooks,
     instantChecks: INSTANT_CONDITIONS,
     sustainedChecks: SUSTAINED_CONDITIONS,
     thresholds: TICK_CHECK_THRESHOLDS,
-    buildView({ ctx, tracker }) {
+    beforeEvaluate({ ctx, unlockByEvent }) {
+      if (ctx.result.meltdown && !lastMeltdown) unlockByEvent('meltdownStarted');
+      lastMeltdown = !!ctx.result.meltdown;
+      const destroyed = ctx.result.destroyedComponents || [];
+      const explosions = destroyed.filter((d) => !depletableIds.has(d.id)).length;
+      if (explosions > 0) unlockByEvent('component_explosion');
+    },
+    buildView({ ctx }) {
       const grid = ctx.grid;
       const destroyed = ctx.result.destroyedComponents || [];
       const explosions = destroyed.filter((d) => !depletableIds.has(d.id)).length;
@@ -333,29 +341,52 @@ export function createRevivalAchievements(manifest, { hooks } = {}) {
         heatRatio: grid.maxHeat > 0 ? grid.currentHeat / grid.maxHeat : 0,
         ventCount: grid.countCategory('vent'),
         tickExplosions: explosions,
-        manualVents,
+        soldHeatCount,
+        soldHeat: soldHeatCount > 0,
         stats: deriveReactorStats(grid, ctx.session?.modifiers || {}),
-        tracker: (checkId) => {
-          if (!trackers[checkId]) trackers[checkId] = {};
-          return trackers[checkId];
-        },
       };
     },
   });
 
-  hooks?.on?.('game:ventHeat', () => { manualVents++; });
+  function markSoldHeat(payload) {
+    if (payload?.remaining == null || payload.remaining <= HEAT_EPSILON) {
+      soldHeatCount += 1;
+      pairedSoldHeat = true;
+    }
+  }
 
-  hooks?.on?.('game:reboot', () => {
+  hooks?.on?.('game:ventHeat', markSoldHeat);
+  hooks?.on?.('game:soldHeat', () => {
+    if (pairedSoldHeat) {
+      pairedSoldHeat = false;
+      return;
+    }
+    soldHeatCount += 1;
+  });
+
+  function tryUnlockPrestige(payload = {}) {
+    if (payload.keepEp !== true) return;
+    const cells = payload.fuelCellCount ?? lastSnapshot.activeCells;
+    const power = toNum(payload.sessionPowerProduced ?? lastSnapshot.powerProduced);
+    const heat = toNum(payload.sessionHeatDissipated ?? lastSnapshot.heatDissipated);
     achievements.unlockByEvent('prestigeCompleted', (id) => {
-      if (id === 'ach_nuclear_disarmament') return lastSnapshot.activeCells === 1;
+      if (id === 'ach_nuclear_disarmament') return cells === 1;
       if (id === 'ach_perfect_weave') {
-        const p = lastSnapshot.powerProduced;
-        const h = lastSnapshot.heatDissipated;
-        return p > 0 && h > 0 && Math.abs(p - h) / Math.max(p, h) <= 0.001;
+        return power > 0 && heat > 0 && Math.abs(power - heat) / Math.max(power, heat) <= 0.001;
       }
       return true;
     });
+  }
+
+  hooks?.on?.('game:reboot', (payload) => {
+    tryUnlockPrestige({
+      keepEp: payload?.options?.keepEp ?? payload?.keepEp,
+      fuelCellCount: payload?.fuelCellCount,
+      sessionPowerProduced: payload?.sessionPowerProduced,
+      sessionHeatDissipated: payload?.sessionHeatDissipated,
+    });
   });
+  hooks?.on?.('game:prestigeCompleted', tryUnlockPrestige);
 
   const onBlueprint = (payload) => {
     const netHeat = payload?.netHeat;
@@ -371,12 +402,8 @@ export function createRevivalAchievements(manifest, { hooks } = {}) {
 
   const baseEvaluate = achievements.evaluate.bind(achievements);
   achievements.evaluate = (ctx) => {
-    if (ctx.result.meltdown && !lastMeltdown) achievements.unlockByEvent('meltdownStarted');
-    lastMeltdown = !!ctx.result.meltdown;
-    const destroyed = ctx.result.destroyedComponents || [];
-    const explosions = destroyed.filter((d) => !depletableIds.has(d.id)).length;
-    if (explosions > 0) achievements.unlockByEvent('component_explosion');
-    baseEvaluate(ctx);
+    const unlockedIds = baseEvaluate(ctx);
+    pairedSoldHeat = false;
     let activeCells = 0;
     ctx.grid.forEach((_, __, inst) => {
       if (inst?.definition?.category === 'cell' && inst.ticks > 0) activeCells++;
@@ -386,6 +413,26 @@ export function createRevivalAchievements(manifest, { hooks } = {}) {
       powerProduced: toNum(ctx.economy?.sessionPowerProduced),
       heatDissipated: toNum(ctx.economy?.sessionHeatDissipated),
     };
+    return unlockedIds;
+  };
+
+  const baseSerialize = achievements.serialize.bind(achievements);
+  const baseDeserialize = achievements.deserialize.bind(achievements);
+  achievements.serialize = () => ({
+    ...baseSerialize(),
+    soldHeatCount,
+    lastSnapshot: { ...lastSnapshot },
+  });
+  achievements.deserialize = (data) => {
+    if (Array.isArray(data)) {
+      baseDeserialize(data);
+      soldHeatCount = 0;
+      lastSnapshot = { activeCells: 0, powerProduced: 0, heatDissipated: 0 };
+      return;
+    }
+    baseDeserialize(data);
+    soldHeatCount = Number(data?.soldHeatCount) || (data?.soldHeat ? 1 : 0);
+    if (data?.lastSnapshot) lastSnapshot = { ...lastSnapshot, ...data.lastSnapshot };
   };
 
   return achievements;

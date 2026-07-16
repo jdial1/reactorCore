@@ -80,7 +80,9 @@ export function createRevivalEconomy(manifest) {
         sessionPowerProduced = sessionPowerProduced.add(grid.powerOutput);
       }
 
-      const autoSellEnabled = ctx.session ? !!ctx.session.toggles?.auto_sell : true;
+      const autoSellEnabled = ctx.session
+        ? !!(ctx.session.toggles?.auto_sell || ctx.session.mechanicsOverrides?.autoSellFromUpgrade)
+        : true;
       const overrides = ctx.session?.mechanicsOverrides ?? {};
       const mods = ctx.session?.modifiers || {};
       const autoSellPercent = toNumber(

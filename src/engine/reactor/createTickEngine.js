@@ -68,6 +68,7 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
         cellOutputs: [],
         heatTransfers: [],
         heatFlowVectors: Object.freeze([]),
+        unlockedAchievementIds: Object.freeze([]),
         failureState: systems.failure?.failureState,
         hullIntegrity: systems.failure?.hullIntegrity,
         hasMeltedDown: systems.failure?.hasMeltedDown,

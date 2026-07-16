@@ -24,7 +24,7 @@ export function createAutomation(options = {}) {
             const canAfford = onReplace(row, col, def, eco, ctx);
             if (canAfford) {
               const newInstance = reg?.create?.(def.id) ?? createInstance(def);
-              if (def.baseTicks) newInstance.ticks = def.baseTicks;
+              if (def.baseTicks) newInstance.ticks = Math.floor(def.baseTicks);
               grid.setComponentAt(row, col, newInstance);
               replacements.push({ row, col, id: def.id });
             }

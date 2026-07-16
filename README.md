@@ -29,7 +29,7 @@ session.dispatch({ type: 'PLACE_PART_PAID', payload: { row: 0, col: 0, id: 'uran
 
 Supported `GAME_IDS`: `reactor_revival`, `reactor_incremental`, `reactor_knockoff`, `ic2_reactor_planner_v3`, `ic2_exp_reactor_planner`.
 
-## Host cutover guide (1.2.5)
+## Host cutover guide (1.2.6)
 
 Use these APIs so the host stops reimplementing cost math, sell refunds, modifier key mapping, and upgrade catalog shaping.
 
@@ -74,7 +74,7 @@ Policy (matches host):
 - Else full `cost` (`def.cost ?? def.baseCost`)
 - Custom `sellValuePolicy` / `computeSellValue` returning non-finite values credits **0**
 
-Note: host Isotope Stabilization can yield fractional max ticks (e.g. 15.75) while core `baseTicks` stays floored; ratios may still diverge until tick defs share the same max.
+Isotope Stabilization keeps fractional `baseTicks` on the def (e.g. 15.75) for sell life ratios; placement/runtime ticks use `Math.floor(baseTicks)`.
 
 Override with `session.sellValuePolicy = (inst, ctx) => number` or payload `policy.computeSellValue`.
 
@@ -119,9 +119,27 @@ session.dispatch({
 
 ### Honor host effective power/heat (transitional)
 
-`cellPhase` and `deriveReactorStats` both honor `mechanicsOverrides.honorHostEffective` (or policy/options). When set, they use `inst._effectivePower` / `_effectiveHeat` if present.
+Prefer core coeffs: `resolveCellCoefficients` + pulse. Mid-session display/test mutations without re-placing should set numeric `inst.power` / `inst.heat` (layout overrides, same shape as former `_effective*`).
 
-**Prefer the core path:** `resolveCellCoefficients` + pulse (`cellMultiplier + neighborN`) for dual/quad, `cellPowerByType`, and protium. Keep `honorHostEffective` only until host mid-test `tile.power` mutations and objective sustained-power cases match without it; then drop the bridge feed.
+`honorHostEffective` + `inst._effectivePower` / `_effectiveHeat` still work when the flag is set; drop the bridge once host tests use `inst.power`/`inst.heat` or core defs alone.
+
+Purchasing upgrades rebinds placed instances to recompiled defs (reinforcement, isotope ticks, cell power, etc.).
+
+### Component reinforcement
+
+`component_reinforcement` is wired in `REVIVAL_EFFECTS` / effect-registry (+10% containment per level). Applied when building capacitor / coolant containment and plating `reactorHeat`. Recompile refreshes placed defs so explosion thresholds and caps update without host `_effectiveContainment`.
+
+### Auto-sell / auto-buy operators
+
+Revival `upgrades.json` includes `auto_sell_operator` / `auto_buy_operator`. Purchase enables `mechanicsOverrides.autoSellFromUpgrade` / `autoBuyFromUpgrade`, which OR with `toggles.auto_sell` / `toggles.auto_buy` so the host can drop a `!hasCoreDef` spend path.
+
+### Prestige / achievements
+
+- Call `session.reboot({ keepEp: true })` for prestige (default `reboot()` also sets `keepEp: !refundEp`). Prestige achievements unlock only when `keepEp === true`.
+- Hosts that prestige without `reboot` should emit `prestigeCompleted` with `{ keepEp: true, fuelCellCount, sessionPowerProduced, sessionHeatDissipated }`.
+- `criticality_recovery_auto` aborts when `soldHeatCount` increases during recovery (full vent / remaining ≤ ε), including after a prior full vent before criticality. A full `VENT_HEAT` (`ventHeat` + `soldHeat` pair) counts once.
+- Achievement `serialize()` persists `{ unlocked, trackers, sustained, soldHeatCount, lastSnapshot }` (array form still deserializes as unlocked-only).
+- Events: `achievementUnlocked` (camelCase, canonical) and `ACHIEVEMENT_UNLOCKED` alias; tick result includes `unlockedAchievementIds`.
 
 ### Layout caps (capacitor / plating)
 
@@ -210,6 +228,18 @@ session.checkObjective(context);
 Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting in the host.
 
 ## Changelog
+
+### 1.2.6
+
+Reinforcement, isotope sell parity, operators, achievement engine gaps:
+
+- Wire `component_reinforcement` (+10%/level) into capacitor/coolant containment and plating `reactorHeat`; refresh placed defs on recompile
+- Fractional Isotope Stabilization `baseTicks` for sell ratios; floor for runtime ticks
+- `inst.power`/`inst.heat` layout overrides (drop `_effective*` bridge when ready); `honorHostEffective` remains transitional
+- `auto_sell_operator` / `auto_buy_operator` upgrade defs; upgrade flags OR with toggles
+- Prestige achievements gated on `keepEp === true`; `prestigeCompleted` payload support
+- `criticality_recovery_auto` uses `soldHeatCount` (monotonic full-vent counter) so a vent after entry aborts even if heat was cleared earlier
+- Persist achievement trackers + sustained state; `unlockedAchievementIds` on tick result; `ACHIEVEMENT_UNLOCKED` event alias
 
 ### 1.2.5
 

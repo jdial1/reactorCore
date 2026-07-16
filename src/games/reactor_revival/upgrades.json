@@ -40,6 +40,26 @@
     "icon": "img/upgrades/upgrade_computer.png"
   },
   {
+    "id": "auto_sell_operator",
+    "type": "other",
+    "title": "Auto-Sell Operator",
+    "description": "Enables automatic power selling when auto-sell percent upgrades are owned.",
+    "cost": 50000,
+    "levels": 1,
+    "icon": "img/upgrades/upgrade_computer.png",
+    "actionId": "auto_sell_operator"
+  },
+  {
+    "id": "auto_buy_operator",
+    "type": "other",
+    "title": "Auto-Buy Operator",
+    "description": "Enables automatic replacement of perpetual parts when they deplete.",
+    "cost": 100000,
+    "levels": 1,
+    "icon": "img/upgrades/upgrade_computer.png",
+    "actionId": "auto_buy_operator"
+  },
+  {
     "id": "improved_piping",
     "type": "other",
     "title": "Coolant Flow Calibration",

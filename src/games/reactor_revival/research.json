@@ -17,6 +17,8 @@
       "upgrades": [
         "heat_control_operator",
         "heat_outlet_control_operator",
+        "auto_sell_operator",
+        "auto_buy_operator",
         "perpetual_capacitors",
         "perpetual_reflectors",
         "isotope_stabilization",

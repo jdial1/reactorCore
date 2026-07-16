@@ -20,9 +20,10 @@ export function createRevivalPhaseRunners(manifest) {
 export function createRevivalAutomation() {
   return createAutomation({
     isEligible(row, col, def, instance, ctx) {
-      if (ctx.session?.toggles?.auto_buy !== true) return false;
+      const overrides = ctx.session?.mechanicsOverrides || {};
+      if (ctx.session?.toggles?.auto_buy !== true && !overrides.autoBuyFromUpgrade) return false;
       if (instance.pendingDestruction) return false;
-      return revivalAutomation.isAutoReplaceEligible(def, ctx.session?.mechanicsOverrides || {});
+      return revivalAutomation.isAutoReplaceEligible(def, overrides);
     },
     onReplace(row, col, def, economy, ctx) {
       return revivalAutomation.onReplace(row, col, def, economy, ctx.session?.mechanicsOverrides || {});

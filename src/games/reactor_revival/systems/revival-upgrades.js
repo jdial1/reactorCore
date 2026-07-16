@@ -37,6 +37,7 @@ const REVIVAL_EFFECTS = {
   unleashed_cells: { effect: 'heat_multiplier', value: 2 },
   unstable_protium: { effect: 'unstable_protium' },
   isotope_stabilization: { effect: 'cell_ticks_global', value: 0.05 },
+  component_reinforcement: { effect: 'component_reinforcement', value: 0.1 },
   experimental_protium_loader: { effect: 'protium_loader' },
 };
 

@@ -102,6 +102,10 @@ export function decodeLegacySave(session, legacy) {
 function serializeExtra(session) {
   const gridSnap = session.grid.getSnapshot();
   const objectivesData = session.systems.objectives?.serialize?.();
+  const achievementsData = session.systems.achievements?.serialize?.() ?? session.achievements ?? [];
+  const unlockedIds = Array.isArray(achievementsData)
+    ? achievementsData
+    : (achievementsData?.unlocked ?? []);
   return {
     saveVersion: session.manifest.saveVersion ?? 2,
     failure: session.systems.failure?.serialize?.(),
@@ -115,8 +119,8 @@ function serializeExtra(session) {
     runId: session.runId ?? null,
     techTree: session.techTree ?? 'unified',
     gracePeriodTicks: session.systems.failure?.gracePeriodTicks ?? 0,
-    achievements: session.systems.achievements?.serialize?.() ?? session.achievements ?? [],
-    unlocked_achievements: session.systems.achievements?.serialize?.() ?? session.achievements ?? [],
+    achievements: achievementsData,
+    unlocked_achievements: unlockedIds,
     total_played_time: session.totalPlayedTime ?? 0,
     last_save_time: session.lastSaveTime ?? Date.now(),
     tileHeat: gridSnap.tileHeat ?? null,
@@ -132,9 +136,12 @@ function deserializeExtra(session, data) {
   if (data.runId != null) session.runId = data.runId;
   if (data.techTree) session.techTree = data.techTree;
   if (data.gracePeriodTicks != null) session.systems.failure?.setGracePeriodTicks?.(data.gracePeriodTicks);
-  if (data.achievements != null) session.achievements = [...data.achievements];
-  else if (data.unlocked_achievements != null) session.achievements = [...data.unlocked_achievements];
-  session.systems.achievements?.deserialize?.(session.achievements);
+  const achievementsRaw = data.achievements ?? data.unlocked_achievements;
+  session.systems.achievements?.deserialize?.(achievementsRaw);
+  const unlockedIds = Array.isArray(achievementsRaw)
+    ? achievementsRaw
+    : (achievementsRaw?.unlocked ?? []);
+  session.achievements = [...unlockedIds];
   if (data.total_played_time != null) session.totalPlayedTime = data.total_played_time;
   if (data.last_save_time != null) session.lastSaveTime = data.last_save_time;
   if (data.placedCounts) session.placedCounts = { ...data.placedCounts };

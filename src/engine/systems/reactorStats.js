@@ -24,7 +24,8 @@ function manualVentReduction(grid, modifiers = {}, options = {}) {
 
 function resolveAutoSellFraction(modifiers = {}, options = {}) {
   if (options.autoSellActive === false) return 0;
-  if (options.autoSellActive !== true && !options.toggles?.auto_sell) return 0;
+  const fromUpgrade = !!(options.mechanicsOverrides?.autoSellFromUpgrade || modifiers.autoSellFromUpgrade);
+  if (options.autoSellActive !== true && !options.toggles?.auto_sell && !fromUpgrade) return 0;
   const percent = options.autoSellPercent ?? modifiers.autoSellPercent ?? 0;
   return Math.max(0, Math.min(1, percent / 100));
 }
@@ -153,7 +154,7 @@ export function createReactorStatsComputer(options = {}) {
         prestigeMultiplier: economy?.getPrestigeMultiplier?.() ?? options.prestigeMultiplier ?? 1,
         mechanicsOverrides,
         toggles,
-        autoSellActive: toggles?.auto_sell,
+        autoSellActive: toggles?.auto_sell || mechanicsOverrides?.autoSellFromUpgrade,
         protiumParticles: economy?.protiumParticles ?? 0,
         criticalHeatRatio,
         highHeatRatio,

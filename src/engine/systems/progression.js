@@ -146,7 +146,7 @@ export function createObjectiveSystem(manifest, { hooks, checks, buildView, onCo
   };
 }
 
-export function createAchievementSystem(manifest, { hooks, instantChecks = {}, sustainedChecks = {}, thresholds = {}, buildView, onUnlock } = {}) {
+export function createAchievementSystem(manifest, { hooks, instantChecks = {}, sustainedChecks = {}, thresholds = {}, buildView, onUnlock, beforeEvaluate } = {}) {
   const achievements = manifest.achievements || [];
   const tickAchievements = achievements.filter((a) => a.triggerType === 'tick' && a.checkId);
   const eventAchievements = new Map();
@@ -160,6 +160,7 @@ export function createAchievementSystem(manifest, { hooks, instantChecks = {}, s
   const trackers = {};
   const sustained = createSustainedTracker();
   let sessionRef = null;
+  let pendingUnlockIds = null;
 
   function tracker(checkId) {
     if (!trackers[checkId]) trackers[checkId] = {};
@@ -170,12 +171,19 @@ export function createAchievementSystem(manifest, { hooks, instantChecks = {}, s
     if (sessionRef) sessionRef.achievements = [...unlocked];
   }
 
+  function emitUnlock(id) {
+    sessionRef?.events?.emit('achievementUnlocked', { id });
+    sessionRef?.events?.emit('ACHIEVEMENT_UNLOCKED', { id });
+  }
+
   function unlock(id) {
-    if (unlocked.has(id)) return;
+    if (unlocked.has(id)) return false;
     unlocked.add(id);
     syncSession();
+    pendingUnlockIds?.push(id);
     onUnlock?.({ session: sessionRef, id });
-    sessionRef?.events?.emit('achievementUnlocked', { id });
+    emitUnlock(id);
+    return true;
   }
 
   function unlockByEvent(eventName, filter = null) {
@@ -205,17 +213,41 @@ export function createAchievementSystem(manifest, { hooks, instantChecks = {}, s
     },
     evaluate(ctx) {
       if (ctx.session) sessionRef = ctx.session;
+      pendingUnlockIds = [];
+      beforeEvaluate?.({ ctx, unlockByEvent, unlock });
       const view = buildView?.({ ctx, tracker, unlockByEvent }) ?? { ctx };
       for (const achievement of tickAchievements) {
         if (unlocked.has(achievement.id)) continue;
         if (evaluateTickCheck(view, achievement.checkId)) unlock(achievement.id);
       }
+      if (ctx.result) {
+        ctx.result.unlockedAchievementIds = Object.freeze([...pendingUnlockIds]);
+      }
+      const unlockedIds = pendingUnlockIds;
+      pendingUnlockIds = null;
       syncSession();
+      return unlockedIds;
     },
-    serialize() { return [...unlocked]; },
+    serialize() {
+      return {
+        unlocked: [...unlocked],
+        trackers: JSON.parse(JSON.stringify(trackers)),
+        sustained: sustained.serialize(),
+      };
+    },
     deserialize(data) {
       unlocked.clear();
-      if (Array.isArray(data)) for (const id of data) unlocked.add(id);
+      for (const key of Object.keys(trackers)) delete trackers[key];
+      sustained.reset();
+      if (Array.isArray(data)) {
+        for (const id of data) unlocked.add(id);
+      } else if (data && typeof data === 'object') {
+        for (const id of data.unlocked || []) unlocked.add(id);
+        if (data.trackers && typeof data.trackers === 'object') {
+          for (const [key, value] of Object.entries(data.trackers)) trackers[key] = value;
+        }
+        sustained.deserialize(data.sustained);
+      }
       syncSession();
     },
   };

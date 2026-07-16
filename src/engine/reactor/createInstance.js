@@ -1,4 +1,8 @@
 export function createInstance(definition, extra = {}) {
+  const rawTicks = extra.ticks ?? definition.baseTicks ?? definition.ticks ?? 0;
+  const ticks = typeof rawTicks === 'number' && Number.isFinite(rawTicks)
+    ? Math.floor(rawTicks)
+    : 0;
   return {
     definition,
     currentHeat: 0,
@@ -6,7 +10,7 @@ export function createInstance(definition, extra = {}) {
     pendingDestruction: false,
     enrichmentProgress: 0,
     converted: false,
-    ticks: extra.ticks ?? definition.baseTicks ?? definition.ticks ?? 0,
+    ticks,
     _hullHeating: 0,
     _componentHeating: 0,
     _hullCooling: 0,

@@ -95,11 +95,20 @@ export function computeCellOutput(def, inst, pulse, reflectorCount, reflectorCoo
     heatMult = Math.max(0.1, 1 - reflectorCount * reflectorCooling);
   }
   const c = Math.max(1, def.cellCount ?? 1);
+  const layoutOverride = typeof inst?.power === 'number' && typeof inst?.heat === 'number'
+    ? { power: inst.power, heat: inst.heat }
+    : null;
   const honorHost = options.honorHostEffective === true;
-  if (honorHost && typeof inst?._effectivePower === 'number' && typeof inst?._effectiveHeat === 'number') {
+  const hostEffective = honorHost
+    && typeof inst?._effectivePower === 'number'
+    && typeof inst?._effectiveHeat === 'number'
+    ? { power: inst._effectivePower, heat: inst._effectiveHeat }
+    : null;
+  const override = layoutOverride || hostEffective;
+  if (override) {
     return {
-      layoutPower: inst._effectivePower,
-      generatedHeat: inst._effectiveHeat * multiplier,
+      layoutPower: override.power,
+      generatedHeat: override.heat * multiplier,
       heatMult,
       pulse,
     };
@@ -162,7 +171,7 @@ export function runCellPhase(ctx, policy = {}) {
 
     inst._heatGenerated = generatedHeat;
     inst.ticks -= multiplier;
-    inst.currentDamage = (def.baseTicks || def.maxDamage) - inst.ticks;
+    inst.currentDamage = (def.maxDamage || Math.floor(def.baseTicks) || 0) - inst.ticks;
     processReflectorNeighbors(grid, row, col, multiplier);
     cellOutputs.push({
       row,

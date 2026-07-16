@@ -33,6 +33,7 @@ export function createBaseModifiers() {
     thermalFeedbackRate: 0,
     volatileTuningMax: 0,
     platingHeatBonus: 0,
+    componentReinforcement: 0,
     reflectorCoolingFactor: 0,
     autoSellFromUpgrade: false,
     autoBuyFromUpgrade: false,
@@ -151,6 +152,9 @@ export const EFFECT_HANDLERS = {
   },
   plating_heat_bonus(mods, def, level) {
     mods.platingHeatBonus = (def.value ?? 0.05) * level;
+  },
+  component_reinforcement(mods, def, level) {
+    mods.componentReinforcement = (def.value ?? 0.1) * level;
   },
   reflector_cooling(mods, def, level) {
     mods.reflectorCoolingFactor = (def.value ?? 0.02) * level;

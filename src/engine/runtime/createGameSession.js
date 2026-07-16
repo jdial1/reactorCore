@@ -209,6 +209,11 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     modifiers = systems.upgrades?.compileModifiers() || {};
     const definitions = buildDefinitionsFromManifest(manifest, modifiers);
     registry.registerAll(definitions);
+    grid.forEach((_, __, inst) => {
+      if (!inst?.definition?.id) return;
+      const next = registry.get(inst.definition.id);
+      if (next) inst.definition = next;
+    });
     grid.recalculateCaps();
     syncMechanicsOverrides(modifiers);
   }
@@ -342,16 +347,29 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       return true;
     },
 
-    reboot(options) {
+    reboot(options = {}) {
       if (!systems.economy) return 0;
-      const earned = systems.economy.reboot(options);
+      const keepEp = options.keepEp != null ? !!options.keepEp : !options.refundEp;
+      const resolved = { ...options, keepEp, refundEp: options.refundEp === true };
+      let activeCells = 0;
+      grid.forEach((_, __, inst) => {
+        if (inst?.definition?.category === 'cell' && inst.ticks > 0) activeCells++;
+      });
+      const prestigePayload = {
+        keepEp,
+        fuelCellCount: activeCells,
+        sessionPowerProduced: toNumber(systems.economy.sessionPowerProduced),
+        sessionHeatDissipated: toNumber(systems.economy.sessionHeatDissipated),
+      };
+      const earned = systems.economy.reboot(resolved);
       grid.clearGrid();
       grid.resetHeat();
       grid.resetPower();
       engine.reset();
       recompileModifiers();
-      ruleset.onPrestige?.(session, options);
-      events.emit('reboot', { earned, options });
+      ruleset.onPrestige?.(session, resolved);
+      events.emit('reboot', { earned, options: resolved, ...prestigePayload });
+      if (keepEp) events.emit('prestigeCompleted', prestigePayload);
       return earned;
     },
 
@@ -446,7 +464,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         prestigeMultiplier: systems.economy?.getPrestigeMultiplier?.() ?? 1,
         mechanicsOverrides: session.mechanicsOverrides,
         toggles,
-        autoSellActive: toggles?.auto_sell,
+        autoSellActive: toggles?.auto_sell || mechanicsOverrides?.autoSellFromUpgrade,
         protiumParticles: systems.economy?.protiumParticles ?? 0,
         criticalHeatRatio: manifest.mechanics?.criticalHeatRatio ?? 0.85,
         highHeatRatio: manifest.mechanics?.highHeatRatio ?? 0.7,
