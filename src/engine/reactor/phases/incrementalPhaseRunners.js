@@ -9,7 +9,8 @@ export function createIncrementalPhaseRunners(manifest, policy = {}) {
   const base = createPhaseRunners(manifest.features);
   const isAutoReplaceEligible = policy.isAutoReplaceEligible
     ?? ((def, overrides = {}) => {
-      if (overrides.perpetualPartIds?.has(def.id)) return true;
+      const perpetualPartIds = overrides.perpetualPartIds;
+      if (perpetualPartIds?.has?.(def.id) || perpetualPartIds?.[def.id]) return true;
       if (overrides.perpetualCategories?.[def.category]) return true;
       if (def.perpetual) return true;
       return false;
@@ -93,7 +94,8 @@ export function createIncrementalPhaseRunners(manifest, policy = {}) {
 export function createRevivalAutomationPolicy(manifest) {
   return {
     isAutoReplaceEligible(def, overrides = {}) {
-      if (overrides.perpetualPartIds?.has(def.id)) return true;
+      const perpetualPartIds = overrides.perpetualPartIds;
+      if (perpetualPartIds?.has?.(def.id) || perpetualPartIds?.[def.id]) return true;
       const perpetualCategories = overrides.perpetualCategories || {};
       if (perpetualCategories[def.category]) return true;
       if (def.perpetual) return true;

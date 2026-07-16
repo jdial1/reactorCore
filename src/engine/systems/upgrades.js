@@ -1,4 +1,5 @@
 import { createEffectRegistry, compileModifiersFromEntries } from './effect-registry.js';
+import { getDecimalCtor, toDecimal, toNumber } from './decimal.js';
 
 function toNum(value) {
   if (value == null) return 0;
@@ -18,19 +19,31 @@ function normalizeErequires(erequires) {
   return Array.isArray(erequires) ? erequires : [erequires];
 }
 
+function computeCost(def, level) {
+  if (!def) return Infinity;
+  if (def.maxLevel != null && level >= def.maxLevel) return Infinity;
+  const base = def.baseCost ?? def.cost ?? 0;
+  const multiplier = def.costMultiplier ?? 2;
+  if (getDecimalCtor()) {
+    const d = toDecimal(base).mul(toDecimal(multiplier).pow(level));
+    return typeof d.floor === 'function' ? d.floor() : toDecimal(Math.floor(toNumber(d)));
+  }
+  return Math.floor(base * Math.pow(multiplier, level));
+}
+
 export function createUpgradeStore(manifest, options = {}) {
   const levels = new Map();
   const upgradeDefs = manifest.upgrades || {};
   const effectRegistry = createEffectRegistry(options.effects);
-  const canPurchaseExtra = options.canPurchaseExtra || null;
+  let canPurchaseExtra = options.canPurchaseExtra || null;
 
-  function flattenUpgrades(obj, prefix = '') {
+  function flattenUpgrades(obj) {
     const result = [];
-    for (const [key, val] of Object.entries(obj)) {
+    for (const val of Object.values(obj)) {
       if (val && typeof val === 'object' && val.id) {
         result.push(val);
       } else if (val && typeof val === 'object' && !Array.isArray(val)) {
-        result.push(...flattenUpgrades(val, `${prefix}${key}.`));
+        result.push(...flattenUpgrades(val));
       }
     }
     return result;
@@ -42,34 +55,73 @@ export function createUpgradeStore(manifest, options = {}) {
   const upgradeMap = new Map(allUpgrades.map((u) => [u.id, u]));
   let cachedModifiers = null;
 
-  return {
-    getLevel(id) {
-      return levels.get(id) || 0;
-    },
-
-    getDefinition(id) {
-      return upgradeMap.get(id) || null;
-    },
+  const store = {
+    getLevel: (id) => levels.get(id) || 0,
+    getDefinition: (id) => upgradeMap.get(id) || null,
+    getAllDefinitions: () => [...upgradeMap.values()],
+    setCanPurchaseExtra: (fn) => { canPurchaseExtra = fn || null; },
 
     getCost(id) {
+      return toNumber(computeCost(upgradeMap.get(id), store.getLevel(id)));
+    },
+
+    getCostDecimal(id) {
+      return computeCost(upgradeMap.get(id), store.getLevel(id));
+    },
+
+    previewPurchase(id, economy = null, session = null) {
       const def = upgradeMap.get(id);
-      if (!def) return Infinity;
-      const level = this.getLevel(id);
-      if (def.maxLevel != null && level >= def.maxLevel) return Infinity;
-      const base = def.baseCost ?? def.cost ?? 0;
-      const multiplier = def.costMultiplier ?? 2;
-      return Math.floor(base * Math.pow(multiplier, level));
+      if (!def) {
+        return { ok: false, reason: 'unknown', id, canPurchase: false, cost: Infinity, currency: null };
+      }
+      const level = store.getLevel(id);
+      const cost = store.getCost(id);
+      const costDecimal = store.getCostDecimal(id);
+      const currency = def.currency || 'money';
+      const maxed = def.maxLevel != null && level >= def.maxLevel;
+      let reason = null;
+      if (maxed) reason = 'max_level';
+      else if (canPurchaseExtra && !canPurchaseExtra(session, id, def)) reason = 'gated';
+      else {
+        for (const req of normalizeErequires(def.erequires)) {
+          if (store.getLevel(req) <= 0) {
+            reason = 'requires';
+            break;
+          }
+        }
+      }
+      if (!reason && economy) {
+        const balance = (currency === 'ep' || currency === 'exotic_particles')
+          ? toNum(economy.currentExoticParticles)
+          : toNum(economy.money);
+        if (balance < cost) reason = 'funds';
+      }
+      const can = !reason && (!economy || store.canPurchase(id, economy, session));
+      return {
+        ok: true,
+        id,
+        title: def.title,
+        def,
+        level,
+        nextLevel: level + 1,
+        maxLevel: def.maxLevel,
+        cost,
+        costDecimal,
+        currency,
+        canPurchase: can,
+        reason,
+      };
     },
 
     canPurchase(id, economy, session = null) {
       const def = upgradeMap.get(id);
       if (!def) return false;
-      if (def.maxLevel != null && this.getLevel(id) >= def.maxLevel) return false;
+      if (def.maxLevel != null && store.getLevel(id) >= def.maxLevel) return false;
       for (const req of normalizeErequires(def.erequires)) {
-        if (this.getLevel(req) <= 0) return false;
+        if (store.getLevel(req) <= 0) return false;
       }
       if (canPurchaseExtra && !canPurchaseExtra(session, id, def)) return false;
-      const cost = this.getCost(id);
+      const cost = store.getCost(id);
       const currency = def.currency || 'money';
       if (currency === 'ep' || currency === 'exotic_particles') {
         return toNum(economy.currentExoticParticles) >= cost;
@@ -78,9 +130,9 @@ export function createUpgradeStore(manifest, options = {}) {
     },
 
     purchase(id, economy, session = null) {
-      if (!this.canPurchase(id, economy, session)) return false;
+      if (!store.canPurchase(id, economy, session)) return false;
       const def = upgradeMap.get(id);
-      const cost = this.getCost(id);
+      const cost = store.getCost(id);
       const currency = def.currency || 'money';
       const spent = { money: 0, ep: 0 };
       if (currency === 'ep' || currency === 'exotic_particles') {
@@ -91,7 +143,7 @@ export function createUpgradeStore(manifest, options = {}) {
       } else {
         spent.money = cost;
       }
-      const newLevel = this.getLevel(id) + 1;
+      const newLevel = store.getLevel(id) + 1;
       levels.set(id, newLevel);
       cachedModifiers = null;
       return { ok: true, id, newLevel, spent };
@@ -116,15 +168,13 @@ export function createUpgradeStore(manifest, options = {}) {
     },
 
     getModifier(name) {
-      if (!cachedModifiers) this.compileModifiers();
+      if (!cachedModifiers) store.compileModifiers();
       if (name in cachedModifiers) return cachedModifiers[name];
       const camel = name.replace(/_([a-z])/g, (_, ch) => ch.toUpperCase());
       return cachedModifiers[camel];
     },
 
-    serialize() {
-      return [...levels.entries()].map(([id, level]) => ({ id, level }));
-    },
+    serialize: () => [...levels.entries()].map(([id, level]) => ({ id, level })),
 
     deserialize(data) {
       levels.clear();
@@ -133,4 +183,6 @@ export function createUpgradeStore(manifest, options = {}) {
       for (const entry of data) levels.set(entry.id, entry.level);
     },
   };
+
+  return store;
 }

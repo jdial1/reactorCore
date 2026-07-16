@@ -21,53 +21,29 @@ export function createTileHeatMap(rows, cols) {
     idx,
     inBounds,
 
-    getHeat(row, col) {
-      if (!inBounds(row, col)) return 0;
-      return heat[idx(row, col)] || 0;
+    getHeat: (row, col) => (inBounds(row, col) ? heat[idx(row, col)] || 0 : 0),
+    setHeat: (row, col, value) => {
+      if (inBounds(row, col)) heat[idx(row, col)] = Math.max(0, value);
     },
-
-    setHeat(row, col, value) {
-      if (!inBounds(row, col)) return;
-      heat[idx(row, col)] = Math.max(0, value);
-    },
-
-    addHeat(row, col, delta) {
+    addHeat: (row, col, delta) => {
       if (!inBounds(row, col)) return;
       const i = idx(row, col);
       heat[i] = Math.max(0, (heat[i] || 0) + delta);
     },
-
-    getIntegrity(row, col) {
-      if (!inBounds(row, col)) return 100;
-      return integrity[idx(row, col)] ?? 100;
+    getIntegrity: (row, col) => (inBounds(row, col) ? integrity[idx(row, col)] ?? 100 : 100),
+    setIntegrity: (row, col, value) => {
+      if (inBounds(row, col)) integrity[idx(row, col)] = Math.max(0, value);
     },
-
-    setIntegrity(row, col, value) {
-      if (!inBounds(row, col)) return;
-      integrity[idx(row, col)] = Math.max(0, value);
+    isActivated: (row, col) => inBounds(row, col) && activated[idx(row, col)] !== 0,
+    setActivated: (row, col, value) => {
+      if (inBounds(row, col)) activated[idx(row, col)] = value ? 1 : 0;
     },
-
-    isActivated(row, col) {
-      if (!inBounds(row, col)) return false;
-      return activated[idx(row, col)] !== 0;
-    },
-
-    setActivated(row, col, value) {
-      if (!inBounds(row, col)) return;
-      activated[idx(row, col)] = value ? 1 : 0;
-    },
-
-    resetIntegrity(value = 100) {
-      integrity.fill(value);
-    },
-
-    snapshot() {
-      return {
-        heat: Array.from(heat),
-        integrity: Array.from(integrity),
-        activated: Array.from(activated),
-      };
-    },
+    resetIntegrity: (value = 100) => { integrity.fill(value); },
+    snapshot: () => ({
+      heat: Array.from(heat),
+      integrity: Array.from(integrity),
+      activated: Array.from(activated),
+    }),
 
     deserialize(data) {
       if (!data) return;
@@ -82,13 +58,7 @@ export function createTileHeatMap(rows, cols) {
       }
     },
 
-    copyToFloat32Array(out) {
-      out.set(heat);
-      return out;
-    },
-
-    applyFromFloat32Array(src) {
-      heat.set(src.subarray(0, size));
-    },
+    copyToFloat32Array: (out) => { out.set(heat); return out; },
+    applyFromFloat32Array: (src) => { heat.set(src.subarray(0, size)); },
   };
 }

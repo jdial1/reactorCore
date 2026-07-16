@@ -24,6 +24,7 @@ export function createBaseModifiers() {
     transferPlatingMultiplier: 0,
     transferCapacitorMultiplier: 0,
     ventPlatingMultiplier: 0,
+    ventCapacitorMultiplier: 0,
     stirlingMultiplier: 0,
     convectiveBoost: 0,
     manualOverrideMult: 0,
@@ -37,7 +38,10 @@ export function createBaseModifiers() {
     autoBuyFromUpgrade: false,
     experimentalUnlocked: false,
     perpetualCategories: {},
+    perpetualPartIds: {},
     cellPowerByType: {},
+    cellTicksByType: {},
+    cellTicksMultiplier: 1,
     unstableProtiumLevel: 0,
   };
 }
@@ -114,6 +118,9 @@ export const EFFECT_HANDLERS = {
   vent_plating(mods, def, level) {
     mods.ventPlatingMultiplier = (def.value || 1) * level;
   },
+  vent_capacitor(mods, def, level) {
+    mods.ventCapacitorMultiplier = (def.value || 1) * level;
+  },
   stirling_multiplier(mods, def, level) {
     mods.stirlingMultiplier = (def.value ?? 0.01) * level;
   },
@@ -157,6 +164,18 @@ export const EFFECT_HANDLERS = {
     const cellType = def.cellType || def.partType;
     if (!cellType || level <= 0) return;
     mods.cellPowerByType[cellType] = level;
+  },
+  cell_tick(mods, def, level) {
+    const cellType = def.cellType || def.partType;
+    if (!cellType || level <= 0) return;
+    mods.cellTicksByType[cellType] = level;
+  },
+  cell_ticks_global(mods, def, level) {
+    mods.cellTicksMultiplier *= 1 + (def.value || 0.05) * level;
+  },
+  cell_perpetual(mods, def, level) {
+    if (level <= 0 || !def.partId) return;
+    mods.perpetualPartIds[def.partId] = true;
   },
   unstable_protium(mods, def, level) {
     mods.unstableProtiumLevel = level;

@@ -16,7 +16,7 @@ const REVIVAL_EFFECTS = {
   active_exchangers: { effect: 'transfer_capacitor', value: 1 },
   improved_heat_vents: { effect: 'vent_effectiveness', value: 0.01 },
   improved_heatsinks: { effect: 'vent_plating', value: 1 },
-  active_venting: { effect: 'vent_capacity', value: 0.01 },
+  active_venting: { effect: 'vent_capacitor', value: 1 },
   improved_power_lines: { effect: 'auto_sell_percent', value: 1 },
   auto_sell_operator: { effect: 'auto_sell_toggle' },
   auto_buy_operator: { effect: 'auto_buy_toggle' },
@@ -36,18 +36,22 @@ const REVIVAL_EFFECTS = {
   infused_cells: { effect: 'power_multiplier', value: 2 },
   unleashed_cells: { effect: 'heat_multiplier', value: 2 },
   unstable_protium: { effect: 'unstable_protium' },
+  isotope_stabilization: { effect: 'cell_ticks_global', value: 0.05 },
 };
 
 const CELL_TYPES = new Set([
   'cell', 'uranium', 'plutonium', 'thorium', 'seaborgium', 'dolorium', 'nefastium', 'protium',
 ]);
 
+function isLevelOneCell(part) {
+  if ((part.level ?? 1) !== 1) return false;
+  return CELL_TYPES.has(part.type) || part.category === 'cell';
+}
+
 function buildCellPowerUpgrades(components) {
   const out = [];
   for (const part of components || []) {
-    if ((part.level ?? 1) !== 1) continue;
-    if (!CELL_TYPES.has(part.type) && part.category !== 'cell') continue;
-    if (part.cellPowerUpgradeCost == null) continue;
+    if (!isLevelOneCell(part) || part.cellPowerUpgradeCost == null) continue;
     const cellType = part.type || 'cell';
     out.push({
       id: `${part.id}_cell_power`,
@@ -58,10 +62,70 @@ function buildCellPowerUpgrades(components) {
       currency: 'money',
       effect: 'cell_power',
       cellType,
+      partId: part.id,
       value: 2,
     });
   }
   return out;
+}
+
+function buildCellTickUpgrades(components) {
+  const out = [];
+  for (const part of components || []) {
+    if (!isLevelOneCell(part) || part.cellTickUpgradeCost == null) continue;
+    const cellType = part.type || 'cell';
+    out.push({
+      id: `${part.id}_cell_tick`,
+      title: `Enriched ${part.title || part.id}`,
+      baseCost: part.cellTickUpgradeCost,
+      costMultiplier: part.cellTickUpgradeMultiplier ?? part.costMultiplier ?? 10,
+      maxLevel: null,
+      currency: 'money',
+      effect: 'cell_tick',
+      cellType,
+      partId: part.id,
+      value: 2,
+    });
+  }
+  return out;
+}
+
+function buildCellPerpetualUpgrades(components) {
+  const out = [];
+  for (const part of components || []) {
+    if (!isLevelOneCell(part) || part.cellPerpetualUpgradeCost == null) continue;
+    out.push({
+      id: `${part.id}_cell_perpetual`,
+      title: `Perpetual ${part.title || part.id}`,
+      baseCost: part.cellPerpetualUpgradeCost,
+      costMultiplier: part.cellPerpetualUpgradeMultiplier ?? 1,
+      maxLevel: 1,
+      currency: 'money',
+      effect: 'cell_perpetual',
+      cellType: part.type || 'cell',
+      partId: part.id,
+      value: 1,
+    });
+  }
+  return out;
+}
+
+export function createTechTreePurchaseGate(manifest) {
+  const trees = manifest.techTree || [];
+  const byId = new Map(trees.map((t) => [t.id, new Set(t.upgrades || [])]));
+  const listedAnywhere = new Set();
+  for (const set of byId.values()) for (const id of set) listedAnywhere.add(id);
+
+  return (session, id, def) => {
+    const treeId = session?.techTree || 'unified';
+    if (treeId === 'unified') return true;
+    const allowed = byId.get(treeId);
+    if (!allowed || allowed.size === 0) return true;
+    if (allowed.has(id)) return true;
+    if (!listedAnywhere.has(id)) return true;
+    if (def?.effect === 'cell_power' || def?.effect === 'cell_tick' || def?.effect === 'cell_perpetual') return true;
+    return false;
+  };
 }
 
 export function createRevivalUpgradeStore(manifest, options = {}) {
@@ -82,10 +146,17 @@ export function createRevivalUpgradeStore(manifest, options = {}) {
     };
   });
 
-  flatUpgrades.push(...buildCellPowerUpgrades(manifest.components));
+  flatUpgrades.push(
+    ...buildCellPowerUpgrades(manifest.components),
+    ...buildCellTickUpgrades(manifest.components),
+    ...buildCellPerpetualUpgrades(manifest.components),
+  );
+
+  const canPurchaseExtra = options.canPurchaseExtra
+    ?? createTechTreePurchaseGate(manifest);
 
   return createUpgradeStore(
     { ...manifest, upgrades: flatUpgrades },
-    { canPurchaseExtra: options.canPurchaseExtra },
+    { canPurchaseExtra },
   );
 }

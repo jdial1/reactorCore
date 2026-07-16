@@ -14,27 +14,18 @@ export function createEconomy(manifest) {
     get totalExoticParticles() { return totalExoticParticles; },
     get timeFlux() { return timeFlux; },
 
-    addMoney(amount) {
-      money += amount;
-      totalMoney += amount;
-    },
-
-    spendMoney(amount) {
+    addMoney: (amount) => { money += amount; totalMoney += amount; },
+    spendMoney: (amount) => {
       if (money < amount) return false;
       money -= amount;
       return true;
     },
-
-    addExoticParticles(amount) {
+    addExoticParticles: (amount) => {
       currentExoticParticles += amount;
       totalExoticParticles += amount;
     },
-
-    addTimeFlux(amount) {
-      timeFlux += amount;
-    },
-
-    spendTimeFlux(amount) {
+    addTimeFlux: (amount) => { timeFlux += amount; },
+    spendTimeFlux: (amount) => {
       if (timeFlux < amount) return false;
       timeFlux -= amount;
       return true;
@@ -60,7 +51,7 @@ export function createEconomy(manifest) {
       totalHeat += ctx.result.heatOutput || 0;
     },
 
-    calculatePrestigeReward() {
+    calculatePrestigeReward: () => {
       const min = Math.min(totalPower, totalHeat);
       if (min < 1e12) return 0;
       return Math.pow(min / 1e12, 0.60206);
@@ -80,19 +71,17 @@ export function createEconomy(manifest) {
       return earned;
     },
 
-    serialize() {
-      return {
-        money,
-        currentExoticParticles,
-        totalExoticParticles,
-        totalMoney,
-        totalPower,
-        totalHeat,
-        timeFlux,
-      };
-    },
+    serialize: () => ({
+      money,
+      currentExoticParticles,
+      totalExoticParticles,
+      totalMoney,
+      totalPower,
+      totalHeat,
+      timeFlux,
+    }),
 
-    deserialize(data) {
+    deserialize: (data) => {
       if (!data) return;
       money = data.money ?? money;
       currentExoticParticles = data.currentExoticParticles ?? currentExoticParticles;

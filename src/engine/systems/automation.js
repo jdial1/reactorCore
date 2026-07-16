@@ -58,13 +58,8 @@ export function createOffline(manifest, options = {}) {
     maxCatchupMs,
     tickRateMs,
 
-    shouldWelcomeBack(elapsedMs) {
-      return welcomeBackThresholdMs > 0 && elapsedMs > welcomeBackThresholdMs;
-    },
-
-    clampElapsedMs(elapsedMs) {
-      return Math.min(Math.max(0, elapsedMs), maxCatchupMs);
-    },
+    shouldWelcomeBack: (elapsedMs) => welcomeBackThresholdMs > 0 && elapsedMs > welcomeBackThresholdMs,
+    clampElapsedMs: (elapsedMs) => Math.min(Math.max(0, elapsedMs), maxCatchupMs),
 
     computeTicks(elapsedMs, upgrades) {
       const clamped = this.clampElapsedMs(elapsedMs);

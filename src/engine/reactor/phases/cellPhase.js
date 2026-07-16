@@ -1,5 +1,6 @@
 import { isBroken } from '../createInstance.js';
 import { CARDINAL_OFFSETS } from '../../kernel/gridUtils.js';
+import { heatPowerMultiplier } from '../../systems/heatPower.js';
 
 function reflectorPulseValue(def) {
   if (def.neighborPulseValue != null) return def.neighborPulseValue;
@@ -106,12 +107,15 @@ export function runCellPhase(ctx, policy = {}) {
   const multiplier = ctx.multiplier ?? 1;
   let powerAdd = 0;
   let heatAdd = 0;
+  const modifiers = ctx.session?.modifiers || ctx.upgrades?.compileModifiers?.() || {};
   const reflectorCooling = policy.reflectorCooling?.(ctx)
     ?? ctx.session?.mechanicsOverrides?.reflectorCoolingFactor
-    ?? ctx.session?.modifiers?.reflectorCoolingFactor
-    ?? ctx.upgrades?.getModifier?.('reflector_cooling_factor')
+    ?? modifiers.reflectorCoolingFactor
     ?? 0;
-  const modifiers = ctx.session?.modifiers || ctx.upgrades?.compileModifiers?.() || {};
+  const heatPowerMult = ctx.session?.mechanicsOverrides?.heatPowerMultiplier
+    ?? modifiers.heatPowerMultiplier
+    ?? 0;
+  const heatBoost = heatPowerMultiplier(heatPowerMult, grid.currentHeat || 0);
   const protiumParticles = ctx.economy?.protiumParticles ?? ctx.session?.systems?.economy?.protiumParticles ?? 0;
   const cellOutputs = [];
   const coeffOptions = {
@@ -139,10 +143,11 @@ export function runCellPhase(ctx, policy = {}) {
     const { layoutPower, generatedHeat } = computeCellOutput(
       def, inst, pulse, reflectorCount, reflectorCooling, multiplier, coeffOptions,
     );
+    const boostedPower = layoutPower * heatBoost;
 
     if (active) {
-      powerAdd += layoutPower * multiplier;
-      inst._powerGenerated = layoutPower * multiplier;
+      powerAdd += boostedPower * multiplier;
+      inst._powerGenerated = boostedPower * multiplier;
     }
 
     const validCount = countContainmentNeighbors(grid, row, col);
@@ -156,11 +161,12 @@ export function runCellPhase(ctx, policy = {}) {
     cellOutputs.push({
       row,
       col,
-      power: layoutPower * (active ? multiplier : 1),
+      power: boostedPower * (active ? multiplier : 1),
       heat: generatedHeat,
       pulseN: n,
       pulse,
       reflectorCount,
+      heatBoost,
     });
     policy.onCellDepleted?.(ctx, { row, col, inst, def });
   });

@@ -33,9 +33,15 @@ export function buildIncrementalCell(spec, modifiers = {}) {
   const baseHeat = specStat(spec, 'heat');
   let baseTicks = specStat(spec, 'ticks') || spec.baseTicks || 0;
   const partType = spec.type || '';
+  const tickLevel = modifiers.cellTicksByType?.[partType] || 0;
+  if (tickLevel > 0) baseTicks = Math.floor(baseTicks * Math.pow(2, tickLevel));
+  const ticksMult = modifiers.cellTicksMultiplier || 1;
+  if (ticksMult !== 1) baseTicks = Math.max(1, Math.floor(baseTicks * ticksMult));
   if (partType === 'protium' && (modifiers.unstableProtiumLevel || 0) > 0) {
     baseTicks = Math.max(1, Math.floor(baseTicks * Math.pow(0.5, modifiers.unstableProtiumLevel)));
   }
+
+  const perpetual = !!(modifiers.perpetualPartIds?.[id] || spec.perpetual);
 
   return createDef({
     id,
@@ -55,6 +61,7 @@ export function buildIncrementalCell(spec, modifiers = {}) {
     cellMultiplier,
     level,
     rodCount: cellCount,
+    perpetual,
 
     generateHeat(instance, grid, row, col, ctx) {
       if (instance.ticks <= 0) return 0;
@@ -220,7 +227,7 @@ export function buildIncrementalOutlet(spec, modifiers = {}) {
 }
 
 export function buildIncrementalCapacitor(spec, modifiers = {}) {
-  const { id, title, category, autoSellPercent = 0, baseCost, extreme = false } = spec;
+  const { id, title, category, autoSellPercent = 0, baseCost, extreme = false, level = 1 } = spec;
   const reactorPower = specStat(spec, 'reactorPower') || specStat(spec, 'power');
   const containment = specStat(spec, 'containment');
   const effectivePower = Math.floor(reactorPower * (modifiers.powerCapacity || 1));
@@ -230,7 +237,7 @@ export function buildIncrementalCapacitor(spec, modifiers = {}) {
     id, name: id, title, category: category || 'capacitor', displayName: title,
     maxHeat: effectiveContainment, power: 0, reactorPower: effectivePower,
     powerAdjustment: effectivePower, containment: effectiveContainment,
-    autoSellPercent, baseCost, extreme,
+    autoSellPercent, baseCost, extreme, level,
     capacitorAutosellHeatRatio: spec.capacitorAutosellHeatRatio || 0,
   });
 }
@@ -262,7 +269,7 @@ export function buildIncrementalCoolant(spec, modifiers = {}) {
 }
 
 export function buildIncrementalPlating(spec, modifiers = {}) {
-  const { id, title, category, baseCost } = spec;
+  const { id, title, category, baseCost, level = 1 } = spec;
   const reactorHeat = specStat(spec, 'reactorHeat') || specStat(spec, 'containment');
   const reactorPower = specStat(spec, 'reactorPower');
   const heatMult = (modifiers.platingCapacity || 1) * (1 + (modifiers.platingHeatBonus || 0));
@@ -275,6 +282,7 @@ export function buildIncrementalPlating(spec, modifiers = {}) {
     reactorPower: effectivePower,
     powerAdjustment: effectivePower,
     baseCost,
+    level,
   });
 }
 

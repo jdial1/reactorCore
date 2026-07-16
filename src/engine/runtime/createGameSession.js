@@ -163,15 +163,38 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
   const offlineSystem = ruleset.createOffline?.() ?? createOffline(manifest);
 
   const systems = ruleset.createSystems({ manifest, hooks });
-  let modifiers = systems.upgrades?.compileModifiers(grid) || {};
+  let modifiers = systems.upgrades?.compileModifiers() || {};
+  let mechanicsOverrides = {};
+
+  function syncMechanicsOverrides(mods) {
+    const perpetualPartIds = new Set(Object.keys(mods.perpetualPartIds || {}));
+    mechanicsOverrides = {
+      ...mechanicsOverrides,
+      perpetualCategories: { ...(mods.perpetualCategories || {}) },
+      perpetualPartIds,
+      reflectorCoolingFactor: mods.reflectorCoolingFactor || 0,
+      stirlingMultiplier: mods.stirlingMultiplier || 0,
+      convectiveBoost: mods.convectiveBoost || 0,
+      heatPowerMultiplier: mods.heatPowerMultiplier || 0,
+      powerToHeatRatio: mods.powerToHeatRatio || 0,
+      manualVentMultiplier: mods.manualVentMultiplier || 1,
+      manualVentPercent: mods.manualVentPercent || 0,
+      autoSellFromUpgrade: !!mods.autoSellFromUpgrade,
+      autoBuyFromUpgrade: !!mods.autoBuyFromUpgrade,
+      heatControlled: !!mods.heatControlled,
+      heatOutletControlled: !!mods.heatOutletControlled,
+    };
+  }
 
   function recompileModifiers() {
-    modifiers = systems.upgrades?.compileModifiers(grid) || {};
+    modifiers = systems.upgrades?.compileModifiers() || {};
+    syncMechanicsOverrides(modifiers);
     const definitions = buildDefinitionsFromManifest(manifest, modifiers);
     registry.registerAll(definitions);
     grid.recalculateCaps();
   }
 
+  syncMechanicsOverrides(modifiers);
   const definitions = buildDefinitionsFromManifest(manifest, modifiers);
   registry.registerAll(definitions);
 
@@ -213,19 +236,16 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     blueprintPlanner: { slots: {}, active: false },
     get paused() { return paused; },
     get modifiers() { return modifiers; },
+    get mechanicsOverrides() { return mechanicsOverrides; },
+    set mechanicsOverrides(value) { mechanicsOverrides = value || {}; },
     get isCatchingUp() { return isCatchingUp; },
     set isCatchingUp(v) { isCatchingUp = !!v; },
 
-    setPaused(value) { paused = !!value; toggles.pause = paused; },
-
-    dispatch(command) {
-      return commands.enqueue(command);
-    },
-
-    drainEvents() {
-      return events.drain();
-    },
-
+    setPaused: (value) => { paused = !!value; toggles.pause = paused; },
+    setCanPurchaseExtra: (fn) => systems.upgrades?.setCanPurchaseExtra?.(fn),
+    previewUpgrade: (id) => systems.upgrades?.previewPurchase?.(id, systems.economy, session) ?? null,
+    dispatch: (command) => commands.enqueue(command),
+    drainEvents: () => events.drain(),
     recompileModifiers,
 
     tick(options = {}) {
@@ -258,9 +278,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       return results;
     },
 
-    runOffline(elapsedMs) {
-      return offlineSystem.runOffline(session, elapsedMs);
-    },
+    runOffline: (elapsedMs) => offlineSystem.runOffline(session, elapsedMs),
 
     purchaseUpgrade(id) {
       if (!systems.upgrades || !systems.economy) return false;
@@ -304,9 +322,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       events.emit('partRemoved', { row, col });
     },
 
-    importDesign(code) {
-      return codecs.importDesign(code, registry, grid);
-    },
+    importDesign: (code) => codecs.importDesign(code, registry, grid),
 
     exportDesign(format = 'json') {
       if (format === 'talonius') return codecs.exportTalonius(grid);
@@ -376,13 +392,8 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       return ruleset.extendSnapshot?.(session, snapshot) ?? snapshot;
     },
 
-    simulateCycle(options) {
-      return engine.simulateCycle(options);
-    },
-
-    simulateGenerationCooldown(options) {
-      return ruleset.simulateGenerationCooldown?.(session, options);
-    },
+    simulateCycle: (options) => engine.simulateCycle(options),
+    simulateGenerationCooldown: (options) => ruleset.simulateGenerationCooldown?.(session, options),
   };
 
   ruleset.onSessionInit?.({

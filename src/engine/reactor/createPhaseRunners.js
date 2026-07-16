@@ -102,10 +102,7 @@ export function createPhaseRunners(features) {
       });
     },
 
-    economy(ctx) {
-      if (!ctx.economy) return;
-      ctx.economy.processTick(ctx);
-    },
+    economy: (ctx) => { ctx.economy?.processTick(ctx); },
 
     meltdown(ctx) {
       const threshold = ctx.manifest.mechanics?.meltdownThreshold;

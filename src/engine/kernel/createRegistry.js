@@ -3,33 +3,30 @@ export function createRegistry(createInstanceFn) {
   const byName = new Map();
   const byExportId = new Map();
 
-  return {
-    register(definition) {
+  const registry = {
+    register: (definition) => {
       byId.set(definition.id, definition);
       if (definition.name) byName.set(definition.name, definition);
       if (definition.exportId != null) byExportId.set(definition.exportId, definition);
     },
 
-    registerAll(definitions) {
-      for (const def of definitions) this.register(def);
+    registerAll: (definitions) => {
+      for (const def of definitions) registry.register(def);
     },
 
-    get(idOrExportId) {
+    get: (idOrExportId) => {
       if (typeof idOrExportId === 'number') return byExportId.get(idOrExportId) || null;
       return byId.get(idOrExportId) || byName.get(idOrExportId) || null;
     },
 
-    create(idOrExportId) {
-      const def = this.get(idOrExportId);
+    create: (idOrExportId) => {
+      const def = registry.get(idOrExportId);
       return def ? createInstanceFn(def) : null;
     },
 
-    getAll() {
-      return [...byId.values()];
-    },
-
-    getByCategory(category) {
-      return this.getAll().filter((d) => d.category === category);
-    },
+    getAll: () => [...byId.values()],
+    getByCategory: (category) => registry.getAll().filter((d) => d.category === category),
   };
+
+  return registry;
 }

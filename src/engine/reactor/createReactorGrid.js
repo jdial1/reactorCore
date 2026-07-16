@@ -28,13 +28,10 @@ export function createReactorGrid(manifest) {
       activeChambers: 0,
     },
 
-    setEnvironment(env) {
-      Object.assign(reactorGrid.environment, env);
-    },
+    setEnvironment: (env) => { Object.assign(reactorGrid.environment, env); },
 
-    getComponentAt(row, col) {
-      return (row >= 0 && row < gridRows && col >= 0 && col < gridCols) ? grid[row][col] : null;
-    },
+    getComponentAt: (row, col) =>
+      (row >= 0 && row < gridRows && col >= 0 && col < gridCols) ? grid[row][col] : null,
 
     setComponentAt(row, col, instance) {
       if (row < 0 || row >= gridRows || col < 0 || col >= gridCols) return;
@@ -92,9 +89,7 @@ export function createReactorGrid(manifest) {
       return tileHeatMap;
     },
 
-    tileIndex(row, col) {
-      return row * gridCols + col;
-    },
+    tileIndex: (row, col) => row * gridCols + col,
 
     resize(newRows, newCols) {
       const oldGrid = grid;
@@ -136,37 +131,22 @@ export function createReactorGrid(manifest) {
       reactorGrid.recalculateCaps();
     },
 
-    adjustCurrentHeat(amount) {
+    adjustCurrentHeat: (amount) => {
       reactorGrid.currentHeat = Math.max(0, reactorGrid.currentHeat + amount);
     },
-
-    adjustMaxHeat(amount) {
-      reactorGrid.maxHeat += amount;
-    },
-
-    adjustMaxPower(amount) {
-      reactorGrid.maxPower += amount;
-    },
-
-    addEUOutput(amount) {
-      reactorGrid.euOutput += amount;
-    },
-
-    addPower(amount) {
+    adjustMaxHeat: (amount) => { reactorGrid.maxHeat += amount; },
+    adjustMaxPower: (amount) => { reactorGrid.maxPower += amount; },
+    addEUOutput: (amount) => { reactorGrid.euOutput += amount; },
+    addPower: (amount) => {
       reactorGrid.powerOutput += amount;
       reactorGrid.currentPower = Math.min(reactorGrid.maxPower, reactorGrid.currentPower + amount);
     },
-
-    addPowerRaw(amount) {
+    addPowerRaw: (amount) => {
       reactorGrid.powerOutput += amount;
       reactorGrid.currentPower += amount;
     },
-
-    ventHeat(amount) {
-      reactorGrid.ventedHeat += amount;
-    },
-
-    clearTickCounters() {
+    ventHeat: (amount) => { reactorGrid.ventedHeat += amount; },
+    clearTickCounters: () => {
       reactorGrid.euOutput = 0;
       reactorGrid.powerOutput = 0;
       reactorGrid.ventedHeat = 0;
@@ -191,9 +171,7 @@ export function createReactorGrid(manifest) {
       return count;
     },
 
-    countComponents() {
-      return reactorGrid.getComponentCount();
-    },
+    countComponents: () => reactorGrid.getComponentCount(),
 
     hasComponentId(id) {
       let found = false;
@@ -211,13 +189,8 @@ export function createReactorGrid(manifest) {
       return count;
     },
 
-    resetHeat() {
-      reactorGrid.currentHeat = 0;
-    },
-
-    resetPower() {
-      reactorGrid.currentPower = 0;
-    },
+    resetHeat: () => { reactorGrid.currentHeat = 0; },
+    resetPower: () => { reactorGrid.currentPower = 0; },
 
     recalculateCaps() {
       reactorGrid.maxHeat = defaults.baseMaxHeat;

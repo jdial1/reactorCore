@@ -19,7 +19,7 @@ export { toDecimal, toNumber, serializeDecimal, deserializeDecimal } from './eng
 export { toNum, countById, neighborInstances, createSustainedTracker, CARDINAL_OFFSETS } from './engine/kernel/gridUtils.js';
 export { createObjectiveSystem, createAchievementSystem } from './engine/systems/progression.js';
 export { createFailureSystem } from './engine/systems/failure.js';
-export { deriveReactorStats, createReactorStatsComputer } from './engine/systems/reactorStats.js';
+export { deriveReactorStats, createReactorStatsComputer, heatPowerMultiplier } from './engine/systems/reactorStats.js';
 export {
   computeNeighborPulseN,
   runCellPhase,
@@ -27,6 +27,13 @@ export {
   resolveCellCoefficients,
 } from './engine/reactor/phases/cellPhase.js';
 export { runHeatPipeline, runVentPhase } from './engine/reactor/heat/heatPipeline.js';
+export {
+  computeGridMultiplierBonuses,
+  resolveTransferRate,
+  resolveVentRate,
+  resolveContainment,
+  sumCategoryLevels,
+} from './engine/reactor/heat/effectiveRates.js';
 export { buildContainmentSegments } from './engine/reactor/heat/containmentSegments.js';
 export { collectOverpressureExplosions, explodeComponent, applyHullRepulsion } from './engine/reactor/explosions.js';
 export { runReactorMechanicsPhase } from './engine/reactor/reactorMechanics.js';
@@ -42,6 +49,8 @@ export {
 export { createIncrementalPhaseRunners } from './engine/reactor/phases/incrementalPhaseRunners.js';
 export { serializeRevivalSession, deserializeRevivalSession, decodeLegacySave } from './games/reactor_revival/persistence.js';
 export { topologyNeighborCoords, Topology, TOPOLOGY_TYPES } from './engine/kernel/neighborTopology.js';
+export { createTechTreePurchaseGate } from './games/reactor_revival/systems/revival-upgrades.js';
+export { createRevivalUpgradeStore } from './games/reactor_revival/systems/revival-upgrades.js';
 
 export const GAME_IDS = [
   'ic2_reactor_planner_v3',

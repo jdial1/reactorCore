@@ -1,4 +1,11 @@
 import { collectOverpressureExplosions } from '../explosions.js';
+import {
+  computeGridMultiplierBonuses,
+  resolveContainment,
+  resolveTransferRate,
+  resolveVentRate,
+  resolveSessionModifiers,
+} from './effectiveRates.js';
 
 const OFFSETS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 const VALVE_OVERFLOW = 1;
@@ -102,26 +109,11 @@ function shouldSkipValveByRatio(def, inputNeighbor, outputNeighbor, grid, mechan
   return false;
 }
 
-function getEffectiveTransfer(inst) {
-  if (typeof inst._effectiveTransfer === 'number' && Number.isFinite(inst._effectiveTransfer)) return inst._effectiveTransfer;
-  const def = inst.definition;
-  for (const key of ['transferRate', 'transfer', 'baseTransfer']) {
-    const value = def[key];
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-  }
-  return 0;
-}
-
-function getEffectiveContainment(inst) {
-  if (typeof inst._effectiveContainment === 'number' && Number.isFinite(inst._effectiveContainment)) return inst._effectiveContainment;
-  return inst.definition.containment || 0;
-}
-
 function buildContainmentArray(grid) {
   const len = grid.rows * grid.cols;
   const containment = new Float32Array(len);
   grid.forEach((row, col, inst) => {
-    if (inst) containment[idx(grid, row, col)] = getEffectiveContainment(inst);
+    if (inst) containment[idx(grid, row, col)] = resolveContainment(inst);
   });
   return containment;
 }
@@ -139,11 +131,11 @@ function syncHeatToGrid(grid, heat) {
   });
 }
 
-function runInlets(heat, grid, reactorHeat, multiplier) {
+function runInlets(heat, grid, reactorHeat, multiplier, bonuses) {
   let heatFromInlets = 0;
   grid.forEach((row, col, inst) => {
     if (!inst || inst.definition.category !== 'heat_inlet') return;
-    const rate = getEffectiveTransfer(inst) * multiplier;
+    const rate = resolveTransferRate(inst, bonuses) * multiplier;
     const neighbors = collectContainmentNeighbors(grid, row, col, true);
     for (let j = 0; j < neighbors.length; j++) {
       const n = neighbors[j];
@@ -164,7 +156,7 @@ function resetValveHeatValues(grid, heat) {
   });
 }
 
-function runValves(heat, containment, grid, multiplier, mechanics, recordTransfers) {
+function runValves(heat, containment, grid, multiplier, mechanics, recordTransfers, bonuses) {
   const heatLen = heat.length;
   const snap = new Float32Array(heatLen);
   snap.set(heat);
@@ -181,7 +173,7 @@ function runValves(heat, containment, grid, multiplier, mechanics, recordTransfe
     valveEntries.push({
       index: idx(grid, row, col),
       typeId: getValveTypeId(inst.definition),
-      transferRate: getEffectiveTransfer(inst),
+      transferRate: resolveTransferRate(inst, bonuses),
       inputIdx: idx(grid, inputNeighbor.row, inputNeighbor.col),
       outputIdx: idx(grid, outputNeighbor.row, outputNeighbor.col),
     });
@@ -284,18 +276,18 @@ function collectExchangerPull(heat, exchangers, valveFlags, startHeatMap, multip
   }
 }
 
-function runExchangers(heat, containment, grid, multiplier, mechanics, recordTransfers) {
+function runExchangers(heat, containment, grid, multiplier, mechanics, recordTransfers, bonuses) {
   const exchangers = [];
   grid.forEach((row, col, inst) => {
     if (!inst || inst.definition.category !== 'heat_exchanger') return;
     const neighbors = collectContainmentNeighbors(grid, row, col, true);
     exchangers.push({
       index: idx(grid, row, col),
-      transferRate: getEffectiveTransfer(inst),
-      containment: inst.definition.containment || 1,
+      transferRate: resolveTransferRate(inst, bonuses),
+      containment: resolveContainment(inst) || 1,
       neighbors: neighbors.map((n) => ({
         index: idx(grid, n.row, n.col),
-        containment: n.inst.definition.containment || 0,
+        containment: resolveContainment(n.inst) || 0,
       })),
     });
   });
@@ -305,13 +297,13 @@ function runExchangers(heat, containment, grid, multiplier, mechanics, recordTra
   collectExchangerPull(heat, exchangers, valveFlags, startHeatMap, multiplier, mechanics, recordTransfers);
 }
 
-function runOutlets(heat, grid, reactorHeat, multiplier) {
+function runOutlets(heat, grid, reactorHeat, multiplier, bonuses) {
   grid.forEach((row, col, inst) => {
     if (!inst || inst.definition.category !== 'heat_outlet') return;
     if (reactorHeat <= 0) return;
     const activated = grid.tileHeatMap?.isActivated(row, col) ?? true;
     if (!activated) return;
-    const transferCap = getEffectiveTransfer(inst) * multiplier;
+    const transferCap = resolveTransferRate(inst, bonuses) * multiplier;
     let toTransfer = Math.min(transferCap, reactorHeat);
     if (toTransfer <= 0) return;
     const neighbors = collectContainmentNeighbors(grid, row, col, true);
@@ -321,7 +313,7 @@ function runOutlets(heat, grid, reactorHeat, multiplier) {
       for (let n = 0; n < neighbors.length; n++) {
         const nb = neighbors[n];
         const nidx = idx(grid, nb.row, nb.col);
-        const cap = getEffectiveContainment(nb.inst);
+        const cap = resolveContainment(nb.inst);
         const current = heat[nidx] || 0;
         let add = perNeighbor;
         if (isOutlet6 && cap > 0) add = Math.min(add, Math.max(0, cap - current));
@@ -343,25 +335,27 @@ export function runHeatPipeline(ctx) {
   const { grid, manifest } = ctx;
   const mechanics = manifest.mechanics || {};
   const multiplier = ctx.multiplier ?? 1;
+  const bonuses = computeGridMultiplierBonuses(grid, resolveSessionModifiers(ctx));
   const len = grid.rows * grid.cols;
   const heat = new Float32Array(len);
   const containment = buildContainmentArray(grid);
   syncHeatFromGrid(grid, heat);
   let reactorHeat = grid.currentHeat || 0;
   const recordTransfers = ctx.features.reactorStats ? [] : null;
-  const inletResult = runInlets(heat, grid, reactorHeat, multiplier);
+  const inletResult = runInlets(heat, grid, reactorHeat, multiplier, bonuses);
   reactorHeat = inletResult.reactorHeat;
-  runValves(heat, containment, grid, multiplier, mechanics, recordTransfers);
-  runExchangers(heat, containment, grid, multiplier, mechanics, recordTransfers);
-  reactorHeat = runOutlets(heat, grid, reactorHeat, multiplier);
+  runValves(heat, containment, grid, multiplier, mechanics, recordTransfers, bonuses);
+  runExchangers(heat, containment, grid, multiplier, mechanics, recordTransfers, bonuses);
+  reactorHeat = runOutlets(heat, grid, reactorHeat, multiplier, bonuses);
   for (let i = 0; i < len; i++) if (heat[i] < HEAT_EPSILON) heat[i] = 0;
   if (reactorHeat < HEAT_EPSILON) reactorHeat = 0;
   syncHeatToGrid(grid, heat);
   grid.currentHeat = reactorHeat;
   if (ctx.features.containmentExplosions) ctx.result.explosionSnapshot = collectOverpressureExplosions(ctx);
   ctx.result.heatFromInlets = inletResult.heatFromInlets;
+  ctx.result.transferMultiplier = bonuses.transferMultiplier;
   if (recordTransfers?.length) ctx.result.heatTransfers = recordTransfers;
-  return { reactorHeat, heatFromInlets: inletResult.heatFromInlets };
+  return { reactorHeat, heatFromInlets: inletResult.heatFromInlets, bonuses };
 }
 
 function countEmptyNeighbors(grid, row, col) {
@@ -375,11 +369,8 @@ function countEmptyNeighbors(grid, row, col) {
   return count;
 }
 
-function effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost) {
-  const baseVent = typeof inst._effectiveVent === 'number'
-    ? inst._effectiveVent
-    : (inst.definition.vent ?? inst.definition.baseVent ?? 0);
-  let rate = baseVent * multiplier;
+function effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost, bonuses) {
+  let rate = resolveVentRate(inst, bonuses) * multiplier;
   if (rate > 0 && convectiveBoost > 0) {
     const empty = countEmptyNeighbors(grid, row, col);
     if (empty > 0) rate *= 1 + empty * convectiveBoost;
@@ -390,18 +381,20 @@ function effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost) {
 export function runVentPhase(ctx) {
   const { grid } = ctx;
   const multiplier = ctx.multiplier ?? 1;
+  const modifiers = resolveSessionModifiers(ctx);
+  const bonuses = computeGridMultiplierBonuses(grid, modifiers);
   let powerAdd = 0;
   let ventHeat = 0;
   const stirling = ctx.session?.mechanicsOverrides?.stirlingMultiplier
-    ?? ctx.upgrades?.getModifier?.('stirling_multiplier')
+    ?? modifiers.stirlingMultiplier
     ?? 0;
   const convectiveBoost = ctx.session?.mechanicsOverrides?.convectiveBoost
-    ?? ctx.upgrades?.getModifier?.('convective_boost')
+    ?? modifiers.convectiveBoost
     ?? 0;
   let poweredVentDemand = 0;
   grid.forEach((row, col, inst) => {
     if (!inst || inst.definition.category !== 'vent' || !inst.definition.ventConsumesPower) return;
-    const rate = effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost);
+    const rate = effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost, bonuses);
     if (rate <= 0) return;
     poweredVentDemand += Math.min(rate, grid.getTileHeat(row, col));
   });
@@ -414,7 +407,7 @@ export function runVentPhase(ctx) {
       inst._ventCooling = 0;
       return;
     }
-    const ventRate = effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost);
+    const ventRate = effectiveVentRate(grid, row, col, inst, multiplier, convectiveBoost, bonuses);
     if (ventRate <= 0) return;
     const h = grid.getTileHeat(row, col);
     const ventReduce = Math.min(ventRate, h);
@@ -429,13 +422,18 @@ export function runVentPhase(ctx) {
   ctx.result.ventedHeat = (ctx.result.ventedHeat || 0) + ventHeat;
   ctx.result.powerOutput = (ctx.result.powerOutput || 0) + powerAdd;
   ctx.result.stirlingPower = powerAdd;
-  return { powerAdd, ventHeat };
+  ctx.result.ventMultiplier = bonuses.ventMultiplier;
+  return { powerAdd, ventHeat, bonuses };
 }
 
 export {
   getValveOrientation,
   getInputOutputNeighbors,
   getValveTypeId,
+  resolveTransferRate,
+  resolveVentRate,
+  resolveContainment,
+  computeGridMultiplierBonuses,
   VALVE_OVERFLOW,
   VALVE_TOPUP,
   VALVE_CHECK,

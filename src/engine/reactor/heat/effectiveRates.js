@@ -1,0 +1,79 @@
+const PLATING_CATEGORIES = new Set(['reactor_plating', 'plating']);
+const CAPACITOR_CATEGORIES = new Set(['capacitor']);
+
+function partLevel(inst) {
+  const level = inst?.definition?.level;
+  return Number.isFinite(level) && level > 0 ? level : 1;
+}
+
+export function sumCategoryLevels(grid, categories) {
+  const set = categories instanceof Set ? categories : new Set(categories);
+  let total = 0;
+  grid.forEach((_, __, inst) => {
+    if (!inst) return;
+    if (set.has(inst.definition.category) || set.has(inst.definition.type)) total += partLevel(inst);
+  });
+  return total;
+}
+
+export function computeGridMultiplierBonuses(grid, modifiers = {}) {
+  const platingLevels = sumCategoryLevels(grid, PLATING_CATEGORIES);
+  const capacitorLevels = sumCategoryLevels(grid, CAPACITOR_CATEGORIES);
+  const transferPlating = modifiers.transferPlatingMultiplier || 0;
+  const transferCapacitor = modifiers.transferCapacitorMultiplier || 0;
+  const ventPlating = modifiers.ventPlatingMultiplier || 0;
+  const ventCapacitor = modifiers.ventCapacitorMultiplier || 0;
+  const transferMultiplier = 1
+    + (transferPlating * platingLevels + transferCapacitor * capacitorLevels) / 100;
+  const ventMultiplier = 1
+    + (ventPlating * platingLevels + ventCapacitor * capacitorLevels) / 100;
+  return Object.freeze({
+    platingLevels,
+    capacitorLevels,
+    transferMultiplier,
+    ventMultiplier,
+    transfer_multiplier_eff: transferMultiplier,
+    vent_multiplier_eff: ventMultiplier,
+  });
+}
+
+export function baseTransferRate(inst) {
+  const def = inst.definition;
+  for (const key of ['transferRate', 'transfer', 'baseTransfer']) {
+    const value = def[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+export function baseVentRate(inst) {
+  const def = inst.definition;
+  return def.vent ?? def.baseVent ?? 0;
+}
+
+export function resolveTransferRate(inst, bonuses = {}) {
+  if (typeof inst._effectiveTransfer === 'number' && Number.isFinite(inst._effectiveTransfer)) {
+    return inst._effectiveTransfer;
+  }
+  return baseTransferRate(inst) * (bonuses.transferMultiplier ?? 1);
+}
+
+export function resolveVentRate(inst, bonuses = {}) {
+  if (typeof inst._effectiveVent === 'number' && Number.isFinite(inst._effectiveVent)) {
+    return inst._effectiveVent;
+  }
+  return baseVentRate(inst) * (bonuses.ventMultiplier ?? 1);
+}
+
+export function resolveContainment(inst) {
+  if (typeof inst._effectiveContainment === 'number' && Number.isFinite(inst._effectiveContainment)) {
+    return inst._effectiveContainment;
+  }
+  return inst.definition.containment || 0;
+}
+
+export function resolveSessionModifiers(ctx) {
+  return ctx.session?.modifiers
+    || ctx.upgrades?.compileModifiers?.()
+    || {};
+}

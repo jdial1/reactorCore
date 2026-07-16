@@ -16,9 +16,7 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
 
   const defaultStages = features.generatesMoney
     ? ['preTick', 'generateHeat', 'destroy', 'economy', 'meltdown']
-    : features.doubleBufferedHeat
-      ? ['preTick', 'environment', 'generateHeat', 'destroy', 'enrich', 'meltdown']
-      : ['preTick', 'environment', 'generateHeat', 'destroy', 'enrich', 'meltdown'];
+    : ['preTick', 'environment', 'generateHeat', 'destroy', 'enrich', 'meltdown'];
 
   let pipeline = null;
 
@@ -73,21 +71,10 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
     get meltdown() { return meltdown; },
     get allFuelRodsDepleted() { return allFuelRodsDepleted; },
 
-    setPipeline(stages) {
-      setPipeline(stages);
-    },
-
-    setLoopOrder(legacy) {
-      legacyLoopOrder = !!legacy;
-    },
-
-    setActive(value) {
-      active = value;
-    },
-
-    setEnvironment(env) {
-      currentEnvironment = env;
-    },
+    setPipeline,
+    setLoopOrder: (legacy) => { legacyLoopOrder = !!legacy; },
+    setActive: (value) => { active = value; },
+    setEnvironment: (env) => { currentEnvironment = env; },
 
     tick(overrides = {}) {
       if (meltdown) return engine.getLastResult();
@@ -191,7 +178,7 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
       return { found: false, cycleLength: 0, ticks: tickCount };
     },
 
-    reset() {
+    reset: () => {
       tickCount = 0;
       meltdown = false;
       allFuelRodsDepleted = false;

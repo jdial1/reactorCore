@@ -4,23 +4,17 @@ export function createSaveCodec({ serializeExtra, deserializeExtra, decodeLegacy
   return {
     saveVersion,
 
-    serialize(session) {
+    serialize: (session) => {
       const base = serializeSession(session);
       const extra = serializeExtra?.(session) ?? {};
       return { ...base, ...extra, saveVersion: extra.saveVersion ?? saveVersion };
     },
-
-    deserialize(session, data) {
+    deserialize: (session, data) => {
       deserializeSession(session, data);
       deserializeExtra?.(session, data);
     },
-
-    canLoad(data) {
-      if (canLoad) return canLoad(data);
-      return data?.saveVersion >= saveVersion;
-    },
-
-    decodeLegacy(session, data) {
+    canLoad: (data) => (canLoad ? canLoad(data) : data?.saveVersion >= saveVersion),
+    decodeLegacy: (session, data) => {
       if (!decodeLegacy) throw new Error('Legacy save decoding is not supported for this game');
       return decodeLegacy(session, data);
     },
