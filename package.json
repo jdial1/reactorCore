@@ -1,6 +1,6 @@
 {
   "name": "reactor-core-lib",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Shared reactor simulation engine for Reactor Revival and related games",
   "type": "module",
   "license": "ISC",

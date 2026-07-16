@@ -17,7 +17,10 @@ import {
   filterAffordablePlacements,
   previewPartialBlueprint,
   computeBlueprintCostBreakdown,
+  computeGridSellCredit,
+  partCostForCell,
 } from '../systems/blueprint.js';
+import { projectModifiersForHost } from '../systems/modifierProjection.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -64,7 +67,13 @@ export async function createGameLoader(gameId) {
 }
 
 function registerDefaultCommands() {
-  registerCommand('PLACE_PART', (session, { row, col, id }) => session.placeComponent(row, col, id));
+  registerCommand('PLACE_PART', (session, payload = {}) => {
+    const { row, col, id, paid = false, policy } = payload;
+    if (paid) return session.placeComponentPaid(row, col, id, policy);
+    return session.placeComponent(row, col, id);
+  });
+  registerCommand('PLACE_PART_PAID', (session, { row, col, id, policy } = {}) =>
+    session.placeComponentPaid(row, col, id, policy));
   registerCommand('REMOVE_PART', (session, { row, col }) => { session.removeComponent(row, col); return true; });
   registerCommand('PURCHASE_UPGRADE', (session, { id }) => session.purchaseUpgrade(id));
   registerCommand('SELL_POWER', (session) => {
@@ -238,6 +247,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     blueprintPlanner: { slots: {}, active: false },
     get paused() { return paused; },
     get modifiers() { return modifiers; },
+    get hostModifiers() { return projectModifiersForHost(modifiers); },
     get mechanicsOverrides() { return mechanicsOverrides; },
     set mechanicsOverrides(value) { mechanicsOverrides = value || {}; },
     get isCatchingUp() { return isCatchingUp; },
@@ -257,6 +267,8 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       filterAffordablePlacements(session, placements, sellCredit, policy),
     layoutCost: (layout, policy = {}) => computeAbsoluteLayoutCost(session, layout, policy),
     blueprintCostBreakdown: (layout, policy = {}) => computeBlueprintCostBreakdown(session, layout, policy),
+    computeGridSellCredit: (sellMultiplier) => computeGridSellCredit(session, sellMultiplier),
+    projectModifiers: () => projectModifiersForHost(modifiers),
     dispatch: (command) => commands.enqueue(command),
     drainEvents: () => events.drain(),
     recompileModifiers,
@@ -327,6 +339,35 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       grid.recalculateCaps();
       events.emit('partPlaced', { row, col, id });
       return true;
+    },
+
+    placeComponentPaid(row, col, id, policy = {}) {
+      const def = registry.get(id) || manifest.components?.find((component) => component.id === id);
+      if (!def) return { ok: false, reason: 'unknown', id, row, col };
+      const economy = systems.economy;
+      if (!economy) return { ok: false, reason: 'no_economy', id, row, col };
+      const cost = partCostForCell(def, { id, lvl: def.level || 1 }, policy);
+      if (cost.ep > 0 && toNumber(economy.currentExoticParticles) < cost.ep) {
+        return { ok: false, reason: 'funds', cost, id, row, col };
+      }
+      if (cost.money > 0 && toNumber(economy.money) < cost.money) {
+        return { ok: false, reason: 'funds', cost, id, row, col };
+      }
+      if (cost.ep > 0 && !economy.spendExoticParticles?.(cost.ep)) {
+        return { ok: false, reason: 'funds', cost, id, row, col };
+      }
+      if (cost.money > 0 && !economy.spendMoney(cost.money)) {
+        if (cost.ep > 0) economy.addExoticParticles?.(cost.ep);
+        return { ok: false, reason: 'funds', cost, id, row, col };
+      }
+      const placed = session.placeComponent(row, col, id);
+      if (!placed) {
+        if (cost.ep > 0) economy.addExoticParticles?.(cost.ep);
+        if (cost.money > 0) economy.addMoney(cost.money);
+        return { ok: false, reason: 'place_failed', cost, id, row, col };
+      }
+      events.emit('partPurchased', { row, col, id, cost });
+      return { ok: true, cost, id, row, col };
     },
 
     removeComponent(row, col) {

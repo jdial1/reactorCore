@@ -43,6 +43,8 @@ export {
   computeBlueprintDiff,
   computeBlueprintCostBreakdown,
   computeAbsoluteLayoutCost,
+  computeGridSellCredit,
+  computePartSellValue,
   filterAffordablePlacements,
   previewPartialBlueprint,
   partCostForCell,
@@ -52,6 +54,7 @@ export {
   clipToGrid,
   sellAllComponents,
 } from './engine/systems/blueprint.js';
+export { projectModifiersForHost, MODIFIER_HOST_ALIASES } from './engine/systems/modifierProjection.js';
 export { createIncrementalPhaseRunners } from './engine/reactor/phases/incrementalPhaseRunners.js';
 export { serializeRevivalSession, deserializeRevivalSession, decodeLegacySave } from './games/reactor_revival/persistence.js';
 export { topologyNeighborCoords, Topology, TOPOLOGY_TYPES } from './engine/kernel/neighborTopology.js';

@@ -207,6 +207,31 @@ export function sellAllComponents(session, sellMultiplier = DEFAULT_SELL_MULTIPL
   return sold;
 }
 
+export function computePartSellValue(def, sellMultiplier = DEFAULT_SELL_MULTIPLIER) {
+  if (!def) return 0;
+  return Math.floor((def.baseCost || 0) * (def.level || 1) * sellMultiplier);
+}
+
+export function computeGridSellCredit(session, sellMultiplier = DEFAULT_SELL_MULTIPLIER) {
+  const grid = session?.grid;
+  if (!grid) return { total: 0, items: [] };
+  const items = [];
+  let total = 0;
+  grid.forEach((r, c, inst) => {
+    if (!inst) return;
+    const value = computePartSellValue(inst.definition, sellMultiplier);
+    total += value;
+    items.push({
+      r,
+      c,
+      id: inst.definition.id,
+      level: inst.definition.level || 1,
+      value,
+    });
+  });
+  return { total, items, sellMultiplier };
+}
+
 export function applyBlueprintLayoutDiff(session, targetLayout, options = {}, policy = {}) {
   if (!session?.grid || !targetLayout) return { ok: false, reason: 'invalid' };
   const diff = computeBlueprintDiff(session, targetLayout, policy);

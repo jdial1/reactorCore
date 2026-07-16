@@ -31,11 +31,37 @@ function computeCost(def, level) {
   return Math.floor(base * Math.pow(multiplier, level));
 }
 
+function buildClassList(def, { available, maxed, visible }) {
+  const classList = ['upgrade'];
+  if (def.section) classList.push(String(def.section));
+  if (def.type) classList.push(String(def.type));
+  if (def.effect) classList.push(`effect_${def.effect}`);
+  if (def.partId) classList.push('cell_upgrade');
+  if (def.currency === 'ep' || def.currency === 'exotic_particles') classList.push('ep');
+  else classList.push('money');
+  if (!visible) classList.push('hidden');
+  if (!available) classList.push('locked');
+  if (maxed) classList.push('maxed');
+  return classList;
+}
+
+function isCellUpgradeVisible(def, store, componentMap, modifiers) {
+  if (!def.partId) return true;
+  const part = componentMap.get(def.partId);
+  if (!part) return false;
+  if (part.experimental && !modifiers?.experimentalUnlocked) return false;
+  for (const req of normalizeErequires(part.erequires)) {
+    if (store.getLevel(req) <= 0) return false;
+  }
+  return true;
+}
+
 export function createUpgradeStore(manifest, options = {}) {
   const levels = new Map();
   const upgradeDefs = manifest.upgrades || {};
   const effectRegistry = createEffectRegistry(options.effects);
   let canPurchaseExtra = options.canPurchaseExtra || null;
+  const componentMap = new Map((manifest.components || []).map((c) => [c.id, c]));
 
   function flattenUpgrades(obj) {
     const result = [];
@@ -73,14 +99,31 @@ export function createUpgradeStore(manifest, options = {}) {
     },
 
     listDisplayCatalog(session = null) {
+      const modifiers = session?.modifiers || store.compileModifiers();
       return [...upgradeMap.values()].map((def) => {
         const level = store.getLevel(def.id);
-        const preview = store.previewPurchase(def.id, null, session);
+        const preview = store.previewPurchase(def.id, session?.systems?.economy ?? null, session);
+        const maxed = def.maxLevel != null && level >= def.maxLevel;
+        const available = preview.reason !== 'gated' && preview.reason !== 'requires' && preview.reason !== 'unknown';
+        const visible = isCellUpgradeVisible(def, store, componentMap, modifiers);
+        const part = def.partId ? componentMap.get(def.partId) || null : null;
+        const partRef = part ? {
+          id: part.id,
+          type: part.type || null,
+          category: part.category || null,
+          title: part.title || part.id,
+          icon: part.icon || null,
+          experimental: !!part.experimental,
+          erequires: part.erequires || null,
+          level: part.level || 1,
+        } : null;
+        const classList = buildClassList(def, { available, maxed, visible });
         return {
           id: def.id,
           title: def.title || def.id,
           description: def.description || null,
-          icon: def.icon || null,
+          icon: def.icon || partRef?.icon || null,
+          iconPath: def.icon || partRef?.icon || null,
           type: def.type || null,
           section: def.section || def.type || null,
           currency: def.currency || 'money',
@@ -88,12 +131,16 @@ export function createUpgradeStore(manifest, options = {}) {
           level,
           cost: preview.cost,
           costDecimal: preview.costDecimal,
-          available: preview.reason !== 'gated' && preview.reason !== 'requires' && preview.reason !== 'unknown',
-          canPurchase: false,
+          available,
+          visible,
+          unlockVisible: visible,
+          canPurchase: !!preview.canPurchase,
           reason: preview.reason,
           effect: def.effect,
           cellType: def.cellType || null,
           partId: def.partId || null,
+          part: partRef,
+          classList,
         };
       });
     },
