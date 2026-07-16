@@ -17,7 +17,7 @@ export { createSaveCodec } from './engine/systems/save.js';
 export { createCommandBus, registerCommand } from './engine/systems/commands.js';
 export { createEventQueue } from './engine/systems/events.js';
 export { toDecimal, toNumber, serializeDecimal, deserializeDecimal } from './engine/systems/decimal.js';
-export { toNum, countById, neighborInstances, createSustainedTracker, CARDINAL_OFFSETS } from './engine/kernel/gridUtils.js';
+export { toNum, isValidGridCoord, countById, neighborInstances, createSustainedTracker, CARDINAL_OFFSETS } from './engine/kernel/gridUtils.js';
 export { createObjectiveSystem, createAchievementSystem } from './engine/systems/progression.js';
 export { createFailureSystem } from './engine/systems/failure.js';
 export { deriveReactorStats, createReactorStatsComputer, heatPowerMultiplier } from './engine/systems/reactorStats.js';
@@ -27,7 +27,7 @@ export {
   computeCellOutput,
   resolveCellCoefficients,
 } from './engine/reactor/phases/cellPhase.js';
-export { runHeatPipeline, runVentPhase } from './engine/reactor/heat/heatPipeline.js';
+export { runHeatPipeline, runVentPhase, heatTransfersToVectors, copyHeatFlowVectors } from './engine/reactor/heat/heatPipeline.js';
 export {
   computeGridMultiplierBonuses,
   resolveTransferRate,
@@ -45,6 +45,8 @@ export {
   computeAbsoluteLayoutCost,
   computeGridSellCredit,
   computePartSellValue,
+  computeInstanceSellValue,
+  partSellCost,
   filterAffordablePlacements,
   previewPartialBlueprint,
   partCostForCell,
@@ -53,6 +55,8 @@ export {
   gridToLayout,
   clipToGrid,
   sellAllComponents,
+  applyBlueprintPayload,
+  checkLayoutAffordability,
 } from './engine/systems/blueprint.js';
 export { projectModifiersForHost, MODIFIER_HOST_ALIASES } from './engine/systems/modifierProjection.js';
 export { createIncrementalPhaseRunners } from './engine/reactor/phases/incrementalPhaseRunners.js';

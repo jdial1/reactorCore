@@ -41,7 +41,11 @@ export function deriveReactorStats(grid, modifiers = {}, options = {}) {
   const heatPowerMult = overrides.heatPowerMultiplier ?? modifiers.heatPowerMultiplier ?? 0;
   const heatBoost = heatPowerMultiplier(heatPowerMult, grid.currentHeat || 0);
   const protiumParticles = options.protiumParticles ?? 0;
-  const coeffOptions = { modifiers, protiumParticles };
+  const coeffOptions = {
+    modifiers,
+    protiumParticles,
+    honorHostEffective: overrides.honorHostEffective === true || options.honorHostEffective === true,
+  };
   const bonuses = computeGridMultiplierBonuses(grid, modifiers);
 
   let cellPower = 0;

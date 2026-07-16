@@ -2,7 +2,7 @@ import { createPipeline } from '../kernel/createPipeline.js';
 import { createPhaseRunners } from './createPhaseRunners.js';
 import { hashGridState } from '../kernel/hashState.js';
 import { preTick } from './createInstance.js';
-
+import { copyHeatFlowVectors } from './heat/heatPipeline.js';
 export function createTickEngine(grid, manifest, hooks, systems = {}, options = {}) {
   const features = manifest.features;
   const runners = options.customRunners || createPhaseRunners(features);
@@ -52,6 +52,8 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
         destroyedComponents: [],
         enrichedCells: [],
         cellOutputs: [],
+        heatTransfers: [],
+        heatFlowVectors: Object.freeze([]),
         failureState: systems.failure?.failureState,
         hullIntegrity: systems.failure?.hullIntegrity,
         hasMeltedDown: systems.failure?.hasMeltedDown,
@@ -120,7 +122,13 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
         hasMeltedDown: failure?.hasMeltedDown,
         gracePeriodTicks: failure?.gracePeriodTicks,
         cellOutputs: [],
+        heatTransfers: [],
+        heatFlowVectors: Object.freeze([]),
       };
+    },
+
+    getLastHeatFlowVectors() {
+      return copyHeatFlowVectors(lastResult?.heatFlowVectors);
     },
 
     simulateCycle(options = {}) {

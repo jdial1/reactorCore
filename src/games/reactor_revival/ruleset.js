@@ -2,9 +2,9 @@ import { createAutomation, createOffline } from '../../engine/systems/automation
 import { createFailureSystem } from '../../engine/systems/failure.js';
 import { createReactorStatsComputer } from '../../engine/systems/reactorStats.js';
 import {
-  applyBlueprintLayoutDiff,
+  applyBlueprintPayload,
   layoutFromPlannerSlots,
-  sellAllComponents,
+  applyBlueprintLayoutDiff,
 } from '../../engine/systems/blueprint.js';
 import { createRevivalEconomy, createRevivalUpgradeStore } from './economy-policy.js';
 import { createObjectiveSystem, createRevivalAchievements } from './progression.js';
@@ -49,15 +49,7 @@ export function createRuleset({ manifest }) {
     },
 
     registerCommands(registerCommand) {
-      registerCommand('APPLY_BLUEPRINT', (session, payload) => {
-        if (!payload?.layout) return { ok: false, reason: 'invalid' };
-        if (payload.sellExisting) sellAllComponents(session);
-        return applyBlueprintLayoutDiff(session, payload.layout, {
-          skipCostDeduction: payload.skipCostDeduction === true,
-          partial: payload.partial === true,
-          sellCredit: payload.sellCredit ?? 0,
-        });
-      });
+      registerCommand('APPLY_BLUEPRINT', (session, payload) => applyBlueprintPayload(session, payload));
       registerCommand('COMMIT_BLUEPRINT_PLANNER', (session, payload) => {
         const layout = layoutFromPlannerSlots(session, payload?.slots);
         if (!layout) return { ok: false, reason: 'empty' };

@@ -22,20 +22,20 @@ Without that, `toDecimal` falls back to `Number` and revival economy calls like 
 ```js
 import { createGameSession } from 'reactor-core-lib';
 
-const session = await createGameSession('reactor_revival');
+const session = await createGameSession({ gameId: 'reactor_revival' });
 session.tick();
 session.dispatch({ type: 'PLACE_PART_PAID', payload: { row: 0, col: 0, id: 'uranium1' } });
 ```
 
 Supported `GAME_IDS`: `reactor_revival`, `reactor_incremental`, `reactor_knockoff`, `ic2_reactor_planner_v3`, `ic2_exp_reactor_planner`.
 
-## Host cutover guide (1.2.3)
+## Host cutover guide (1.2.4)
 
-Use these APIs so the host stops reimplementing cost math, sell previews, modifier key mapping, and upgrade catalog shaping.
+Use these APIs so the host stops reimplementing cost math, sell refunds, modifier key mapping, and upgrade catalog shaping.
 
 ### Paid placement (one dispatch)
 
-**Problem:** Hosts debit money/EP, then place, then refund if place fails — easy to desync with `partCostForCell`.
+**Problem:** Hosts debit money/EP, then place, then refund if place fails — easy to desync with `partCostForCell`. Occupied/OOB coordinates must not debit.
 
 **Use:** Atomic place+charge:
 
@@ -49,57 +49,105 @@ session.dispatch({ type: 'PLACE_PART_PAID', payload: { row, col, id } });
 // or
 const result = session.placeComponentPaid(row, col, id);
 // { ok, cost: { money, ep }, reason?, id, row, col }
+// reason: 'bounds' | 'occupied' | 'funds' | 'unknown' | 'place_failed' | ...
 ```
 
-Debit uses the same `partCostForCell` path as blueprint paste. On place failure, money/EP are refunded. Free place remains `PLACE_PART` without `paid` / `session.placeComponent`.
+Validates **bounds and occupancy before debit** (no money lost on bad coords). Debit uses `partCostForCell`; refunds on place failure. Free place remains `PLACE_PART` without `paid` / `session.placeComponent` (may overwrite).
 
-### Sell-credit preview (non-mutating)
+### Live part sell (life / containment)
 
-**Problem:** Paste “sell replaced parts” checkboxes and UI totals need a 0.5× credit without calling `sellAllComponents` (which mutates the grid).
+**Problem:** Host `calculateSellValue` credits remaining cell life or containment heat damage. Core used to hardcode `floor(baseCost * level * 0.5)`; the revival bridge patched the money delta after `SELL_PART`.
 
 **Use:**
+
+```js
+session.dispatch({ type: 'SELL_PART', payload: { row, col } });
+// or preview
+session.computeSellValue(row, col);
+computeInstanceSellValue(inst, { row, col, grid });
+```
+
+Policy (matches host):
+
+- Cells with ticks: `ceil(cost * ticksRemaining / maxTicks)`
+- Containment parts: `cost - ceil(cost * heatContained / containment)`
+- Else full `cost` (`def.cost ?? def.baseCost`)
+
+Override with `session.sellValuePolicy = (inst, ctx) => number` or payload `policy.computeSellValue`.
+
+### Sell-credit preview + blueprint sell
+
+**Flat 0.5× (default):** matches `APPLY_BLUEPRINT` when `sellExisting` is set without instance options.
 
 ```js
 const { total, items, sellMultiplier } = session.computeGridSellCredit();
-// or computeGridSellCredit(session)
+session.dispatch({
+  type: 'APPLY_BLUEPRINT',
+  payload: { layout, sellExisting: true, sellCredit: total },
+});
 ```
 
-Same formula as sell-all / per-part sell (`floor(baseCost * level * 0.5)` by default). Pass an optional multiplier if host policy differs. Feed `total` into `filterAffordablePlacements` / paste preview as `sellCredit`.
+**Instance / life-ratio mode:** preview and execution must use the same mode. `APPLY_BLUEPRINT` with `sellExisting` **pre-flights affordability** using absolute layout cost vs `money + computeGridSellCredit(...)` **before** any sell; on `{ ok:false, reason:'deficit' }` the grid and wallet are unchanged. With `sellExisting`, preflight always uses the real sell proceeds (payload `sellCredit` is not required; host may leave it `0`). After a successful preflight sell, apply uses `sellCredit: 0` because proceeds are already in the economy.
 
-### Modifier projection for tooltips / legacy tile code
+```js
+const credit = session.computeGridSellCredit(0.5, { mode: 'instance' });
+session.dispatch({
+  type: 'APPLY_BLUEPRINT',
+  payload: {
+    layout,
+    sellExisting: true,
+    sellMode: 'instance', // or lifeRatio: true
+    sellCredit: credit.total,
+  },
+});
+```
 
-**Problem:** Session modifiers are camelCase (`ventEffectiveness`, `autoSellPercent`). Host tile/`recalculate_stats` code often expects snake_case (`vent_effectiveness`).
+`sellAllComponents(session, mult, { mode: 'instance' })` uses the same policy as `SELL_PART`.
+
+### Paid placement coords
+
+`placeComponent` / `placeComponentPaid` / `SELL_PART` require finite integer in-range coords (`isValidGridCoord`). Malformed values (`NaN`, `undefined`, `0.5`) return `{ ok:false, reason:'bounds' }` (paid) or `false` (free/sell) with **no economy mutation**. Grid getters never throw on bad coords.
+
+### Cell basePower (dual / quad)
+
+**Problem:** Multi-cell entries used to bake scaled `basePower` (e.g. uranium2=2.5) while the host keeps template `base_power` with `cellMultiplier` 4/12.
+
+**Lib:** Revival `parts.json` now stores the **single-cell coefficient** on all forms (`uranium1/2/3` → `basePower: 1`). Pulse math remains `basePower * (cellMultiplier + neighborN)`.
+
+### Honor host effective power/heat in stats
+
+**Problem:** `cellPhase` already respected `honorHostEffective`; `deriveReactorStats` did not.
+
+**Use:** Set `mechanicsOverrides.honorHostEffective = true` (or pass `options.honorHostEffective`). Stats then use `inst._effectivePower` / `_effectiveHeat` when present.
+
+### Heat-flow vectors (presentation)
+
+**Problem:** Host heat-flow renderers expect last-tick vectors `{ fromRow, fromCol, toRow, toCol, amount }`.
 
 **Use:**
 
 ```js
-const reactor = session.hostModifiers;
-// or projectModifiersForHost(session.modifiers)
-// or session.projectModifiers()
+session.getHeatFlowVectors();
+session.engine.getLastHeatFlowVectors();
+session.tick().heatFlowVectors;
+session.getSnapshot().heatFlowVectors;
 ```
 
-Keeps camelCase keys and adds snake_case aliases (plus documented `MODIFIER_HOST_ALIASES`). Nested plain objects get both key styles. Hosts can drop the local mapping table.
+Recorded from valve/exchanger transfers every tick. Accessors and snapshots return **copied frozen** vectors (safe to retain across ticks).
+
+### Modifier projection for tooltips / legacy tile code
+
+**Problem:** Session modifiers are camelCase (`ventEffectiveness`). Host tile code often expects snake_case.
+
+**Use:** `session.hostModifiers` / `projectModifiersForHost(session.modifiers)` / `session.projectModifiers()`.
 
 ### Upgrade display catalog
 
-**Problem:** Hosts wrap upgrade defs into presentation objects (`classList`, part ref for cell-upgrade visibility, icon paths).
-
-**Use:** `session.listUpgrades()` / `upgrades.listDisplayCatalog(session)` returns entries with:
-
-| Field | Purpose |
-| --- | --- |
-| `title`, `description`, `icon` / `iconPath` | Labels and art |
-| `section`, `type`, `currency`, `level`, `maxLevel`, `cost` | Panels and affordance |
-| `available`, `canPurchase`, `reason` | Lock / buy state |
-| `visible` / `unlockVisible` | Cell-upgrade unlock visibility (`erequires` / experimental) |
-| `part` / `partId` | Linked component for cell upgrades |
-| `classList` | Host CSS hooks (`upgrade`, section, `locked`, `maxed`, `hidden`, …) |
-
-Still prefer `session.previewUpgrade(id)` for a single purchase preview. Tech-tree gating: `session.setCanPurchaseExtra(createTechTreePurchaseGate(...))`.
+Prefer `session.listUpgrades()` for `visible` / `classList` / `part` / `iconPath` / affordance. Tech-tree gating: `session.setCanPurchaseExtra(createTechTreePurchaseGate(...))`.
 
 ### Mechanics overrides
 
-`recompileModifiers` owns `session.mechanicsOverrides` for: perpetual ids/categories, `hasProtiumLoader`, `autoReplaceCosts`, `sellPriceMultiplier`, `autoSellPercent`, `alteredMaxPower` (from `grid.maxPower`), `powerOverflowToHeatRatio` (from manifest economy). Stop merging a host sidecar for those keys.
+`recompileModifiers` owns `session.mechanicsOverrides` for: perpetual ids/categories, `hasProtiumLoader`, `autoReplaceCosts`, `sellPriceMultiplier`, `autoSellPercent`, `alteredMaxPower`, `powerOverflowToHeatRatio`. Stop merging a host sidecar for those keys.
 
 ### Blueprint paste
 
@@ -110,11 +158,9 @@ Still prefer `session.previewUpgrade(id)` for a single purchase preview. Tech-tr
 | What fits with current funds + sell credit | `session.previewPartialBlueprint(layout)` / `filterAffordablePlacements` |
 | Apply | `APPLY_BLUEPRINT` / `COMMIT_BLUEPRINT_PLANNER` |
 
-**Part cost policy** — Default `partCostForCell`: `(baseCost\|cost) * level`; EP when `erequires` / `currency==='ep'` / `ecost` is set. Override via `policy.partCostForCell` if presentation prices diverge. Paste debit and absolute layout cost share this helper.
+**Part cost policy** — Default `partCostForCell`: `(baseCost\|cost) * level`; EP when `erequires` / `currency==='ep'` / `ecost` is set.
 
 ### Objectives
-
-Pass presentation meltdown/failure without patching `session.engine`:
 
 ```js
 session.getObjectiveProgress({ meltdown, hasMeltedDown, failure });
@@ -123,15 +169,29 @@ session.checkObjective(context);
 
 ### Containment / vent display
 
-- `buildContainmentSegments(grid, { modifiers })` and snapshot `containmentSegments` include fullness + resolved vent/transfer rates per tile and segment totals.
-- **Active venting** is intentional **grid-wide** capacitor level sum (`ventCapacitorMultiplier`), matching upgrade text (“+1% vent rate per Capacitor level”), not neighbor-local capacitors.
-- Stats expose full multipliers (`vent_multiplier_eff` / `transfer_multiplier_eff`) and additive percents (`vent_multiplier_add` / `transfer_multiplier_add` = `(mult - 1) * 100`) for older tile getters.
+- `buildContainmentSegments` / snapshot `containmentSegments` include fullness + vent/transfer rates.
+- **Active venting** is intentional **grid-wide** capacitor level sum.
+- Stats expose `vent_multiplier_eff` / `transfer_multiplier_eff` and additive percent aliases.
 
 ### Tooltip / placement preview math
 
 Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting in the host.
 
 ## Changelog
+
+### 1.2.4
+
+Host cutover Q–U:
+
+- `SELL_PART` / `computeInstanceSellValue` life-ratio and containment-damage refunds (optional `sellValuePolicy`)
+- Revival dual/quad cells: `basePower`/`baseHeat` = single-cell coefficient (pulse uses `cellMultiplier`)
+- `deriveReactorStats` passes `honorHostEffective` into cell coeff options
+- Last-tick `heatFlowVectors` on tick result, snapshot, `engine.getLastHeatFlowVectors`, `session.getHeatFlowVectors` (copied/frozen)
+- `placeComponentPaid` rejects `bounds` / `occupied` before debit; `placeComponent` returns false on OOB
+- Instance-mode sell credit is actionable: `sellAllComponents` / `APPLY_BLUEPRINT` accept `sellMode: 'instance'` / `lifeRatio`
+- `APPLY_BLUEPRINT` + `sellExisting` pre-flights affordability before sell (no destructive deficit)
+- `computeGridSellCredit` always returns `sellMultiplier` (including empty/no-grid)
+- Paid/free place and `SELL_PART` reject non-integer / non-finite coords via `isValidGridCoord` before any debit
 
 ### 1.2.3
 

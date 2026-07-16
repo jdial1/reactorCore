@@ -341,7 +341,7 @@ export function runHeatPipeline(ctx) {
   const containment = buildContainmentArray(grid);
   syncHeatFromGrid(grid, heat);
   let reactorHeat = grid.currentHeat || 0;
-  const recordTransfers = ctx.features.reactorStats ? [] : null;
+  const recordTransfers = [];
   const inletResult = runInlets(heat, grid, reactorHeat, multiplier, bonuses);
   reactorHeat = inletResult.reactorHeat;
   runValves(heat, containment, grid, multiplier, mechanics, recordTransfers, bonuses);
@@ -354,8 +354,31 @@ export function runHeatPipeline(ctx) {
   if (ctx.features.containmentExplosions) ctx.result.explosionSnapshot = collectOverpressureExplosions(ctx);
   ctx.result.heatFromInlets = inletResult.heatFromInlets;
   ctx.result.transferMultiplier = bonuses.transferMultiplier;
-  if (recordTransfers?.length) ctx.result.heatTransfers = recordTransfers;
+  ctx.result.heatTransfers = recordTransfers;
+  ctx.result.heatFlowVectors = heatTransfersToVectors(recordTransfers, grid.cols);
   return { reactorHeat, heatFromInlets: inletResult.heatFromInlets, bonuses };
+}
+
+export function heatTransfersToVectors(transfers = [], cols = 1) {
+  const width = Math.max(1, cols | 0);
+  return Object.freeze(transfers.map(({ fromIdx, toIdx, amount }) => Object.freeze({
+    fromRow: Math.floor(fromIdx / width),
+    fromCol: fromIdx % width,
+    toRow: Math.floor(toIdx / width),
+    toCol: toIdx % width,
+    amount,
+  })));
+}
+
+export function copyHeatFlowVectors(vectors = []) {
+  if (!vectors.length) return Object.freeze([]);
+  return Object.freeze(vectors.map((v) => Object.freeze({
+    fromRow: v.fromRow,
+    fromCol: v.fromCol,
+    toRow: v.toRow,
+    toCol: v.toCol,
+    amount: v.amount,
+  })));
 }
 
 function countEmptyNeighbors(grid, row, col) {

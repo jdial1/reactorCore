@@ -18,9 +18,11 @@ import {
   previewPartialBlueprint,
   computeBlueprintCostBreakdown,
   computeGridSellCredit,
+  computeInstanceSellValue,
   partCostForCell,
 } from '../systems/blueprint.js';
 import { projectModifiersForHost } from '../systems/modifierProjection.js';
+import { isValidGridCoord } from '../kernel/gridUtils.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -123,11 +125,17 @@ function registerDefaultCommands() {
     return session.paused;
   });
   registerCommand('REBOOT', (session, payload) => session.reboot(payload));
-  registerCommand('SELL_PART', (session, { row, col }) => {
+  registerCommand('SELL_PART', (session, { row, col, policy } = {}) => {
+    if (!isValidGridCoord(row, col, session.grid)) return false;
     const inst = session.grid.getComponentAt(row, col);
     if (!inst) return false;
-    const def = inst.definition;
-    const sellValue = Math.floor((def.baseCost || 0) * (def.level || 1) * 0.5);
+    const sellValue = computeInstanceSellValue(inst, {
+      row,
+      col,
+      grid: session.grid,
+      session,
+      computeSellValue: policy?.computeSellValue || session.sellValuePolicy,
+    });
     session.removeComponent(row, col);
     if (sellValue > 0) session.systems.economy?.addMoney(sellValue);
     session.events?.emit('partSold', { row, col, value: sellValue });
@@ -267,11 +275,24 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       filterAffordablePlacements(session, placements, sellCredit, policy),
     layoutCost: (layout, policy = {}) => computeAbsoluteLayoutCost(session, layout, policy),
     blueprintCostBreakdown: (layout, policy = {}) => computeBlueprintCostBreakdown(session, layout, policy),
-    computeGridSellCredit: (sellMultiplier) => computeGridSellCredit(session, sellMultiplier),
+    computeGridSellCredit: (sellMultiplier, options) => computeGridSellCredit(session, sellMultiplier, options),
+    computeSellValue: (row, col) => {
+      const inst = grid.getComponentAt(row, col);
+      if (!inst) return 0;
+      return computeInstanceSellValue(inst, {
+        row,
+        col,
+        grid,
+        session,
+        computeSellValue: session.sellValuePolicy,
+      });
+    },
     projectModifiers: () => projectModifiersForHost(modifiers),
+    getHeatFlowVectors: () => engine.getLastHeatFlowVectors?.() ?? Object.freeze([]),
     dispatch: (command) => commands.enqueue(command),
     drainEvents: () => events.drain(),
     recompileModifiers,
+    sellValuePolicy: null,
 
     tick(options = {}) {
       if (paused || engine.meltdown) return engine.getLastResult();
@@ -333,6 +354,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     },
 
     placeComponent(row, col, id) {
+      if (!isValidGridCoord(row, col, grid)) return false;
       const inst = registry.create(id);
       if (!inst) return false;
       grid.setComponentAt(row, col, inst);
@@ -342,6 +364,12 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     },
 
     placeComponentPaid(row, col, id, policy = {}) {
+      if (!isValidGridCoord(row, col, grid)) {
+        return { ok: false, reason: 'bounds', id, row, col };
+      }
+      if (grid.getComponentAt(row, col)) {
+        return { ok: false, reason: 'occupied', id, row, col };
+      }
       const def = registry.get(id) || manifest.components?.find((component) => component.id === id);
       if (!def) return { ok: false, reason: 'unknown', id, row, col };
       const economy = systems.economy;
@@ -371,6 +399,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     },
 
     removeComponent(row, col) {
+      if (!isValidGridCoord(row, col, grid)) return;
       grid.setComponentAt(row, col, null);
       grid.recalculateCaps();
       events.emit('partRemoved', { row, col });
@@ -436,6 +465,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         powerNetChange: stats?.powerNetChange,
         heatNetChange: stats?.heatNetChange,
         containmentSegments,
+        heatFlowVectors: engine.getLastHeatFlowVectors?.() ?? Object.freeze([]),
         engine: { tickCount: engine.tickCount, meltdown: engine.meltdown },
         toggles: { ...toggles },
         techTree: session.techTree,

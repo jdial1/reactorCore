@@ -5,6 +5,13 @@ export function toNum(value) {
   return Number(value) || 0;
 }
 
+export function isValidGridCoord(row, col, grid) {
+  if (!Number.isInteger(row) || !Number.isInteger(col)) return false;
+  if (!Number.isFinite(row) || !Number.isFinite(col)) return false;
+  if (!grid) return false;
+  return row >= 0 && col >= 0 && row < grid.rows && col < grid.cols;
+}
+
 export function countById(grid, id, activeOnly = false) {
   let count = 0;
   grid.forEach((_, __, inst) => {

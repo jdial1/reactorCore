@@ -194,12 +194,22 @@ function debitLayoutCost(session, breakdown) {
   return true;
 }
 
-export function sellAllComponents(session, sellMultiplier = DEFAULT_SELL_MULTIPLIER) {
+export function sellAllComponents(session, sellMultiplier = DEFAULT_SELL_MULTIPLIER, options = {}) {
   const { grid } = session;
+  if (!grid) return [];
+  const useInstance = options.mode === 'instance' || options.lifeRatio === true;
   const sold = [];
   grid.forEach((r, c, inst) => {
     if (!inst) return;
-    const value = Math.floor((inst.definition.baseCost || 0) * (inst.definition.level || 1) * sellMultiplier);
+    const value = useInstance
+      ? computeInstanceSellValue(inst, {
+        row: r,
+        col: c,
+        grid,
+        session,
+        computeSellValue: options.computeSellValue || session?.sellValuePolicy,
+      })
+      : computePartSellValue(inst.definition, sellMultiplier);
     session.removeComponent(r, c);
     if (value > 0) session.systems.economy?.addMoney(value);
     sold.push({ r, c, value });
@@ -207,19 +217,58 @@ export function sellAllComponents(session, sellMultiplier = DEFAULT_SELL_MULTIPL
   return sold;
 }
 
-export function computePartSellValue(def, sellMultiplier = DEFAULT_SELL_MULTIPLIER) {
+export function partSellCost(def) {
   if (!def) return 0;
-  return Math.floor((def.baseCost || 0) * (def.level || 1) * sellMultiplier);
+  if (def.cost != null) return toNum(def.cost);
+  return toNum(def.baseCost ?? 0);
 }
 
-export function computeGridSellCredit(session, sellMultiplier = DEFAULT_SELL_MULTIPLIER) {
+export function computePartSellValue(def, sellMultiplier = DEFAULT_SELL_MULTIPLIER) {
+  if (!def) return 0;
+  return Math.floor(partSellCost(def) * (def.level || 1) * sellMultiplier);
+}
+
+export function computeInstanceSellValue(inst, context = {}) {
+  if (!inst) return 0;
+  if (typeof context.computeSellValue === 'function') {
+    return Math.max(0, toNum(context.computeSellValue(inst, context)));
+  }
+  const def = inst.definition;
+  if (!def) return 0;
+  const cost = partSellCost(def);
+  const maxTicks = toNum(def.baseTicks ?? def.ticks ?? 0);
+  if (maxTicks > 0 && typeof inst.ticks === 'number') {
+    const lifeRemainingRatio = Math.max(0, inst.ticks / maxTicks);
+    return Math.max(0, Math.ceil(cost * lifeRemainingRatio));
+  }
+  const containment = toNum(def.containment ?? def.baseContainment ?? 0);
+  if (containment > 0) {
+    const heat = context.heatContained != null
+      ? toNum(context.heatContained)
+      : toNum(context.grid?.getTileHeat?.(context.row, context.col) ?? inst.currentHeat ?? 0);
+    const damageRatio = Math.min(1, heat / containment);
+    return Math.max(0, cost - Math.ceil(cost * damageRatio));
+  }
+  return Math.max(0, cost);
+}
+
+export function computeGridSellCredit(session, sellMultiplier = DEFAULT_SELL_MULTIPLIER, options = {}) {
+  const useInstance = options.mode === 'instance' || options.lifeRatio === true;
   const grid = session?.grid;
-  if (!grid) return { total: 0, items: [] };
+  if (!grid) return { total: 0, items: [], sellMultiplier: useInstance ? null : sellMultiplier };
   const items = [];
   let total = 0;
   grid.forEach((r, c, inst) => {
     if (!inst) return;
-    const value = computePartSellValue(inst.definition, sellMultiplier);
+    const value = useInstance
+      ? computeInstanceSellValue(inst, {
+        row: r,
+        col: c,
+        grid,
+        session,
+        computeSellValue: options.computeSellValue || session?.sellValuePolicy,
+      })
+      : computePartSellValue(inst.definition, sellMultiplier);
     total += value;
     items.push({
       r,
@@ -229,7 +278,7 @@ export function computeGridSellCredit(session, sellMultiplier = DEFAULT_SELL_MUL
       value,
     });
   });
-  return { total, items, sellMultiplier };
+  return { total, items, sellMultiplier: useInstance ? null : sellMultiplier };
 }
 
 export function applyBlueprintLayoutDiff(session, targetLayout, options = {}, policy = {}) {
@@ -301,4 +350,74 @@ export function applyBlueprintLayoutDiff(session, targetLayout, options = {}, po
     maxPower: session.grid.maxPower,
     maxHeat: session.grid.maxHeat,
   };
+}
+
+export function checkLayoutAffordability(session, breakdown, sellCredit = 0) {
+  return checkAffordability(session, breakdown, sellCredit);
+}
+
+export function applyBlueprintPayload(session, payload = {}, policy = {}) {
+  if (!payload?.layout) return { ok: false, reason: 'invalid' };
+
+  const sellExisting = !!payload.sellExisting;
+  const sellMultiplier = payload.sellMultiplier ?? DEFAULT_SELL_MULTIPLIER;
+  const sellOpts = {
+    mode: payload.sellMode,
+    lifeRatio: payload.lifeRatio,
+    computeSellValue: payload.computeSellValue || session?.sellValuePolicy,
+  };
+  const skipCostDeduction = payload.skipCostDeduction === true;
+  const partial = payload.partial === true;
+
+  if (sellExisting) {
+    const previewCredit = computeGridSellCredit(session, sellMultiplier, sellOpts).total;
+    const sellCredit = previewCredit;
+    const absolute = computeAbsoluteLayoutCost(session, payload.layout, policy);
+
+    if (!skipCostDeduction) {
+      if (partial) {
+        const placements = absolute.items.map(({ r, c, cell, def }) => ({ r, c, cell, def }));
+        const affordable = filterAffordablePlacements(session, placements, sellCredit, policy);
+        if (affordable.length === 0 && placements.length > 0) {
+          const deficit = checkAffordability(session, absolute.breakdown, sellCredit) || {
+            moneyShort: 0,
+            epShort: 0,
+          };
+          return {
+            ok: false,
+            reason: 'deficit',
+            ...deficit,
+            breakdown: absolute.breakdown,
+            sellCredit,
+            previewCredit,
+          };
+        }
+      } else {
+        const deficit = checkAffordability(session, absolute.breakdown, sellCredit);
+        if (deficit) {
+          return {
+            ok: false,
+            reason: 'deficit',
+            ...deficit,
+            breakdown: absolute.breakdown,
+            sellCredit,
+            previewCredit,
+          };
+        }
+      }
+    }
+
+    sellAllComponents(session, sellMultiplier, sellOpts);
+    return applyBlueprintLayoutDiff(session, payload.layout, {
+      skipCostDeduction,
+      partial,
+      sellCredit: 0,
+    }, policy);
+  }
+
+  return applyBlueprintLayoutDiff(session, payload.layout, {
+    skipCostDeduction,
+    partial,
+    sellCredit: payload.sellCredit ?? 0,
+  }, policy);
 }

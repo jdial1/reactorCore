@@ -1,5 +1,6 @@
 import { createInstance, cloneInstance } from './createInstance.js';
 import { createTileHeatMap } from './tileHeatMap.js';
+import { isValidGridCoord } from '../kernel/gridUtils.js';
 
 export function createReactorGrid(manifest) {
   const defaults = manifest.gridDefaults;
@@ -31,10 +32,10 @@ export function createReactorGrid(manifest) {
     setEnvironment: (env) => { Object.assign(reactorGrid.environment, env); },
 
     getComponentAt: (row, col) =>
-      (row >= 0 && row < gridRows && col >= 0 && col < gridCols) ? grid[row][col] : null,
+      isValidGridCoord(row, col, reactorGrid) ? grid[row][col] : null,
 
     setComponentAt(row, col, instance) {
-      if (row < 0 || row >= gridRows || col < 0 || col >= gridCols) return;
+      if (!isValidGridCoord(row, col, reactorGrid)) return;
 
       const existing = grid[row][col];
       if (existing?.definition.onRemoveFromGrid) existing.definition.onRemoveFromGrid(existing, reactorGrid);
