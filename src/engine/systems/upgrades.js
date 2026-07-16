@@ -107,15 +107,29 @@ export function createUpgradeStore(manifest, options = {}) {
         const available = preview.reason !== 'gated' && preview.reason !== 'requires' && preview.reason !== 'unknown';
         const visible = isCellUpgradeVisible(def, store, componentMap, modifiers);
         const part = def.partId ? componentMap.get(def.partId) || null : null;
-        const partRef = part ? {
-          id: part.id,
-          type: part.type || null,
-          category: part.category || null,
-          title: part.title || part.id,
-          icon: part.icon || null,
-          experimental: !!part.experimental,
-          erequires: part.erequires || null,
-          level: part.level || 1,
+        const compiled = def.partId && session?.registry?.get
+          ? session.registry.get(def.partId)
+          : null;
+        const partRef = (compiled || part) ? {
+          id: (compiled || part).id,
+          type: (compiled || part).type || part?.type || null,
+          category: (compiled || part).category || part?.category || null,
+          title: (compiled || part).title || part?.title || (compiled || part).id,
+          icon: part?.icon || compiled?.icon || null,
+          experimental: !!(part?.experimental || compiled?.experimental),
+          erequires: part?.erequires ?? compiled?.erequires ?? null,
+          level: compiled?.level ?? part?.level ?? 1,
+          baseTicks: compiled?.baseTicks ?? part?.baseTicks ?? null,
+          containment: compiled?.containment ?? part?.containment ?? null,
+          reactorPower: compiled?.reactorPower ?? compiled?.powerAdjustment ?? part?.reactorPower ?? null,
+          reactorHeat: compiled?.reactorHeat ?? compiled?.heatAdjustment ?? part?.reactorHeat ?? null,
+          basePower: compiled?.basePower ?? part?.basePower ?? null,
+          baseHeat: compiled?.baseHeat ?? part?.baseHeat ?? null,
+          vent: compiled?.vent ?? part?.vent ?? null,
+          transfer: (typeof compiled?.transferRate === 'number' ? compiled.transferRate : null)
+            ?? (typeof compiled?.transfer === 'number' ? compiled.transfer : null)
+            ?? part?.transfer ?? null,
+          perpetual: !!(compiled?.perpetual),
         } : null;
         const classList = buildClassList(def, { available, maxed, visible });
         return {

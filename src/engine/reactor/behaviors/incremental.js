@@ -107,20 +107,30 @@ export function buildIncrementalCell(spec, modifiers = {}) {
   });
 }
 
-export function buildIncrementalReflector(spec) {
+export function buildIncrementalReflector(spec, modifiers = {}) {
   const { id, title, category, baseCost } = spec;
-  const powerIncrease = specStat(spec, 'powerIncrease');
+  const basePowerIncrease = specStat(spec, 'powerIncrease');
   const heatIncrease = specStat(spec, 'heatIncrease');
-  const baseTicks = specStat(spec, 'ticks') || spec.baseTicks || 0;
+  let baseTicks = specStat(spec, 'ticks') || spec.baseTicks || 0;
+  const durMult = modifiers.reflectorDurationMultiplier || 1;
+  if (durMult !== 1) baseTicks = Math.max(1, Math.floor(baseTicks * durMult));
+  const powerPercent = modifiers.reflectorPowerPercent || 0;
+  const powerBonusLevels = modifiers.reflectorPowerBonusLevels || 0;
+  const legacyPowerMult = modifiers.reflectorPowerMultiplier || 1;
+  const powerIncrease = basePowerIncrease
+    * (1 + powerPercent)
+    * legacyPowerMult
+    + basePowerIncrease * powerBonusLevels;
+  const tickLife = Math.max(1, Math.floor(baseTicks));
   return createDef({
     id, name: id, title, category: category || 'reflector', displayName: title,
-    maxHeat: 1, maxDamage: baseTicks, baseTicks, baseCost,
+    maxHeat: 1, maxDamage: tickLife, baseTicks, baseCost,
     pulseMultiplier: 1, powerIncrease, heatIncrease,
     isNeutronReflector: (inst) => !isBroken(inst) && inst.ticks > 0,
     generateHeat(instance, grid, row, col) {
       if (instance.ticks > 0) {
         instance.ticks -= 1;
-        instance.currentDamage = baseTicks - instance.ticks;
+        instance.currentDamage = tickLife - instance.ticks;
         if (instance.ticks <= 0) instance.pendingDestruction = true;
       }
       return 0;
@@ -155,7 +165,7 @@ export function buildIncrementalExchanger(spec, modifiers = {}) {
   const transfer = specStat(spec, 'transfer');
   const containment = specStat(spec, 'containment');
   const effectiveTransfer = Math.floor(transfer * (modifiers.transferEffectiveness || 1));
-  const effectiveContainment = Math.floor(containment * (modifiers.ventCapacity || 1));
+  const effectiveContainment = Math.floor(containment * (modifiers.transferCapacity || 1));
 
   return createDef({
     id, name: id, title, category: category || 'heat_exchanger', displayName: title,

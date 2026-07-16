@@ -29,7 +29,7 @@ session.dispatch({ type: 'PLACE_PART_PAID', payload: { row: 0, col: 0, id: 'uran
 
 Supported `GAME_IDS`: `reactor_revival`, `reactor_incremental`, `reactor_knockoff`, `ic2_reactor_planner_v3`, `ic2_exp_reactor_planner`.
 
-## Host cutover guide (1.2.6)
+## Host cutover guide (1.2.7)
 
 Use these APIs so the host stops reimplementing cost math, sell refunds, modifier key mapping, and upgrade catalog shaping.
 
@@ -62,10 +62,12 @@ Validates **bounds and occupancy before debit** (no money lost on bad coords). D
 
 ```js
 session.dispatch({ type: 'SELL_PART', payload: { row, col } });
-// or preview
+// authoritative tooltip / HUD preview (uses inst.ticks / def.baseTicks incl. fractional isotope max)
 session.computeSellValue(row, col);
 computeInstanceSellValue(inst, { row, col, grid });
 ```
+
+Do **not** use host `part.ticks` (display life) as the sell denominator — that drifts from core fractional `baseTicks`.
 
 Policy (matches host):
 
@@ -135,11 +137,63 @@ Revival `upgrades.json` includes `auto_sell_operator` / `auto_buy_operator`. Pur
 
 ### Prestige / achievements
 
-- Call `session.reboot({ keepEp: true })` for prestige (default `reboot()` also sets `keepEp: !refundEp`). Prestige achievements unlock only when `keepEp === true`.
-- Hosts that prestige without `reboot` should emit `prestigeCompleted` with `{ keepEp: true, fuelCellCount, sessionPowerProduced, sessionHeatDissipated }`.
+Prefer core ownership for weave + reboot:
+
+```js
+session.previewPrestige(); // { earned, weaveQuantum, keepEp, fuelCellCount, ... }
+session.calculatePrestigeReward();
+session.prestige(); // alias: reboot({ keepEp: true, refundEp: false })
+session.reboot({ keepEp: true }); // or refundEp: true for full reset
+```
+
+`calculateWeaveEp(power, heat, weaveQuantum)` is exported for UI without a session. Revival `economy.weaveQuantum` defaults to `manifest.economy.weaveQuantum` (1e6).
+
+If the host still runs a parallel applyDefaults path, it must emit `prestigeCompleted` with `{ keepEp: true, fuelCellCount, sessionPowerProduced, sessionHeatDissipated }` (and preferably `earned`) so achievements match. Prefer `session.prestige()` / `session.reboot({ keepEp: true })` instead.
+
+- Prestige achievements unlock only when `keepEp === true`.
 - `criticality_recovery_auto` aborts when `soldHeatCount` increases during recovery (full vent / remaining ≤ ε), including after a prior full vent before criticality. A full `VENT_HEAT` (`ventHeat` + `soldHeat` pair) counts once.
 - Achievement `serialize()` persists `{ unlocked, trackers, sustained, soldHeatCount, lastSnapshot }` (array form still deserializes as unlocked-only).
 - Events: `achievementUnlocked` (camelCase, canonical) and `ACHIEVEMENT_UNLOCKED` alias; tick result includes `unlockedAchievementIds`.
+
+### Compiled part catalog (shop / tooltips)
+
+Prefer core compiled defs over host `part.recalculate_stats` multiplier walks:
+
+```js
+session.listParts(); // post-recompile containment / reactorPower / baseTicks / vent / …
+session.getPart('capacitor2');
+```
+
+`listUpgrades()` `part` refs include the same compiled fields when `session.registry` is present.
+
+**Catalog parity (1.2.7):** compiled defs now match host display for:
+
+- `improved_heat_vents` / `improved_heat_exchangers`: +100%/level rate **and** capacity (`vent_boost` / `transfer_boost`)
+- `improved_reflector_density`: doubles reflector `baseTicks` via `reflectorDurationMultiplier`
+- `improved_neutron_reflection`: +1%/level on `powerIncrease`; `full_spectrum_reflectors`: +100% of base `powerIncrease` per level
+- Experimental: `fluid_hyperdynamics`, `fractal_piping`, `ultracryonics` (coolant ×2^n)
+
+Drop host-local multiplier walks for these. `infused_cells` / `unleashed_cells` remain global cell `powerMultiplier` / `heatMultiplier` (knockoff-style), not reflector/transfer overlays from the upgrade blurb.
+
+### Display vent / transfer rates
+
+```js
+session.resolveDisplayRates('vent1'); // or placed inst / def
+resolvePartDisplayRates(id, session);
+resolveDisplayRates(inst, session.grid, session.modifiers);
+```
+
+Returns `{ vent, transfer, containment, baseVent, baseTransfer, bonuses }` using `resolveVentRate` / `resolveTransferRate` + grid plating/capacitor bonuses. Prefer this (or snapshot `containmentSegments`) over host `tile.recalculateEffectiveValues` / `Part.getEffectiveVentValue`.
+
+### Auto-replace costs
+
+Aligned with host `getAutoReplacementCost`:
+
+- non-perpetual → `baseCost`
+- perpetual cell / reflector → `baseCost * 1.5`
+- perpetual capacitor → `baseCost * 10` (`capacitorSellMultiplier`, overridable via `manifest.mechanics.autoReplace.capacitorSellMultiplier`)
+
+`session.mechanicsOverrides.autoReplaceCosts` and `session.partAutoReplaceCost(id)` rebuild on recompile from perpetual modifiers — hosts can stop feeding a sidecar every sync.
 
 ### Layout caps (capacitor / plating)
 
@@ -152,7 +206,7 @@ Revival `parts.json` bakes host expansion for tiers 1–5:
 
 ### Vent / transfer / containment rates
 
-`resolveVentRate` / `resolveTransferRate` / `resolveContainment` use def base rates × compiled grid bonuses only. Host `_effectiveVent` / `_effectiveTransfer` / `_effectiveContainment` are **ignored** so the bridge can stop copying tile getters every sync.
+`resolveVentRate` / `resolveTransferRate` / `resolveContainment` use def base rates × compiled grid bonuses only. Host `_effectiveVent` / `_effectiveTransfer` / `_effectiveContainment` are **ignored**. Prefer `session.resolveDisplayRates(...)` for tooltips (see Display vent / transfer rates above).
 
 ### Heat-flow vectors (presentation)
 
@@ -228,6 +282,17 @@ session.checkObjective(context);
 Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting in the host.
 
 ## Changelog
+
+### 1.2.7
+
+Host display / prestige / auto-replace cutover:
+
+- `session.listParts` / `getPart` / `listCompiledParts` — post-recompile part catalog for shop/tooltips
+- Catalog parity: vent/exchanger +100% boosts, reflector duration/power, experimental fluid/fractal/ultracryonics/full_spectrum
+- `session.resolveDisplayRates` / `resolvePartDisplayRates` — vent/transfer/containment display helper
+- `session.previewPrestige` / `prestige` / `calculatePrestigeReward` / `calculateWeaveEp` — weave EP ownership
+- Auto-replace costs: perpetual cell/reflector 1.5×, perpetual capacitor 10×, else baseCost
+- Document `session.computeSellValue(row,col)` as authoritative sell preview (fractional isotope `baseTicks`)
 
 ### 1.2.6
 

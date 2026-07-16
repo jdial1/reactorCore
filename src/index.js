@@ -10,7 +10,9 @@ export { buildBehavior, buildDefinitionsFromManifest } from './engine/reactor/be
 export { createInstance, cloneInstance, preTick, isBroken } from './engine/reactor/createInstance.js';
 export { createEconomy } from './engine/systems/economy.js';
 export { createUpgradeStore } from './engine/systems/upgrades.js';
-export { compileMechanicsOverrides, buildAutoReplaceCosts } from './engine/systems/mechanicsPolicy.js';
+export { compileMechanicsOverrides, buildAutoReplaceCosts, partAutoReplaceCost, isPartPerpetual, CAPACITOR_AUTO_REPLACE_MULTIPLIER, PERPETUAL_AUTO_REPLACE_MULTIPLIER } from './engine/systems/mechanicsPolicy.js';
+export { listCompiledParts, getCompiledPart, projectCompiledPart } from './engine/systems/partCatalog.js';
+export { calculateWeaveEp, previewPrestige } from './engine/systems/prestige.js';
 export { createAutomation, createOffline } from './engine/systems/automation.js';
 export { serializeSession, deserializeSession } from './engine/systems/codecs.js';
 export { createSaveCodec } from './engine/systems/save.js';
@@ -34,6 +36,8 @@ export {
   resolveTransferRate,
   resolveVentRate,
   resolveContainment,
+  resolveDisplayRates,
+  resolvePartDisplayRates,
   sumCategoryLevels,
 } from './engine/reactor/heat/effectiveRates.js';
 export { buildContainmentSegments } from './engine/reactor/heat/containmentSegments.js';

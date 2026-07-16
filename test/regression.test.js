@@ -19,6 +19,10 @@ import {
   createAchievementSystem,
   createRevivalUpgradeStore,
   createGameSession,
+  buildAutoReplaceCosts,
+  partAutoReplaceCost,
+  calculateWeaveEp,
+  previewPrestige,
 } from '../src/index.js';
 import {
   buildIncrementalCapacitor,
@@ -469,4 +473,132 @@ test('achievement unlock emits aliases and unlockedAchievementIds', () => {
   assert.ok(types.includes('ACHIEVEMENT_UNLOCKED'));
   assert.equal(drained.find((e) => e.type === 'achievementUnlocked').payload.id, 'ach_lab');
   assert.equal(drained.find((e) => e.type === 'ACHIEVEMENT_UNLOCKED').payload.id, 'ach_lab');
+});
+
+test('listParts exposes compiled containment and baseTicks', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(1_000_000);
+  const before = session.getPart('coolant_cell1');
+  assert.equal(before.containment, 2000);
+  assert.equal(session.purchaseUpgrade('component_reinforcement'), true);
+  assert.equal(session.purchaseUpgrade('isotope_stabilization'), true);
+  const cool = session.getPart('coolant_cell1');
+  assert.equal(cool.containment, 2200);
+  const cell = session.getPart('uranium1');
+  assert.equal(cell.baseTicks, 15.75);
+  const listed = session.listParts();
+  assert.ok(listed.some((p) => p.id === 'uranium1' && p.baseTicks === 15.75));
+});
+
+test('resolveDisplayRates applies grid plating/capacitor bonuses', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  assert.equal(session.placeComponent(0, 0, 'vent1'), true);
+  const base = session.resolveDisplayRates('vent1');
+  assert.ok(base.vent > 0);
+  assert.equal(base.vent, base.baseVent);
+  assert.equal(session.placeComponent(0, 1, 'reactor_plating1'), true);
+  assert.equal(session.purchaseUpgrade('improved_heatsinks'), true);
+  const boosted = session.resolveDisplayRates(session.grid.getComponentAt(0, 0));
+  assert.ok(boosted.vent > boosted.baseVent);
+  assert.ok(boosted.bonuses.ventMultiplier > 1);
+});
+
+test('autoReplaceCosts match host perpetual formulas', () => {
+  const parts = [
+    { id: 'uranium1', category: 'cell', baseCost: 10 },
+    { id: 'capacitor1', category: 'capacitor', baseCost: 1000 },
+    { id: 'vent1', category: 'vent', baseCost: 50 },
+  ];
+  const none = buildAutoReplaceCosts(parts, {});
+  assert.equal(none.uranium1, 10);
+  assert.equal(none.capacitor1, 1000);
+  assert.equal(none.vent1, 50);
+
+  const perpetual = buildAutoReplaceCosts(parts, {
+    perpetualPartIds: { uranium1: true },
+    perpetualCategories: { capacitor: true },
+  });
+  assert.equal(perpetual.uranium1, 15);
+  assert.equal(perpetual.capacitor1, 10000);
+  assert.equal(perpetual.vent1, 50);
+  assert.equal(partAutoReplaceCost(parts[1], { perpetualCategories: { capacitor: true } }), 10000);
+});
+
+test('previewPrestige and calculateWeaveEp match weave quantum', () => {
+  assert.equal(calculateWeaveEp(5_000_000, 2_000_000, 1_000_000), 2);
+  assert.equal(calculateWeaveEp(100, 200, 1_000_000), 0);
+  const preview = previewPrestige({
+    manifest: { economy: { weaveQuantum: 1000 } },
+    systems: {
+      economy: {
+        sessionPowerProduced: 5000,
+        sessionHeatDissipated: 4000,
+        weaveQuantum: 1000,
+        calculatePrestigeReward() { return 4; },
+      },
+    },
+    grid: { forEach(fn) { fn(0, 0, { definition: { category: 'cell' }, ticks: 3 }); } },
+  }, { keepEp: true });
+  assert.equal(preview.earned, 4);
+  assert.equal(preview.weaveQuantum, 1000);
+  assert.equal(preview.keepEp, true);
+  assert.equal(preview.fuelCellCount, 1);
+});
+
+test('session.computeSellValue uses fractional compiled baseTicks', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(1_000_000);
+  assert.equal(session.purchaseUpgrade('isotope_stabilization'), true);
+  assert.equal(session.placeComponent(0, 0, 'uranium1'), true);
+  const inst = session.grid.getComponentAt(0, 0);
+  assert.equal(inst.definition.baseTicks, 15.75);
+  assert.equal(inst.ticks, 15);
+  const value = session.computeSellValue(0, 0);
+  assert.equal(value, Math.ceil(10 * (15 / 15.75)));
+});
+
+test('improved_heat_vents doubles vent rate and capacity on compiled defs', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  const before = session.getPart('vent1');
+  assert.equal(session.purchaseUpgrade('improved_heat_vents'), true);
+  const after = session.getPart('vent1');
+  assert.equal(after.vent, before.vent * 2);
+  assert.equal(after.containment, before.containment * 2);
+});
+
+test('reflector duration and power upgrades compile into listParts', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  session.systems.economy.addExoticParticles(500);
+  const before = session.getPart('reflector1');
+  assert.equal(before.baseTicks, 100);
+  assert.equal(before.powerIncrease, 5);
+  assert.equal(session.purchaseUpgrade('improved_reflector_density'), true);
+  assert.equal(session.getPart('reflector1').baseTicks, 200);
+  assert.equal(session.purchaseUpgrade('improved_neutron_reflection'), true);
+  assert.equal(session.getPart('reflector1').powerIncrease, 5 * 1.01);
+  assert.equal(session.purchaseUpgrade('laboratory'), true);
+  assert.equal(session.purchaseUpgrade('full_spectrum_reflectors'), true);
+  assert.equal(session.getPart('reflector1').powerIncrease, 5 * 1.01 + 5);
+});
+
+test('experimental fluid/fractal/ultracryonics compile into part catalog', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addMoney(10_000_000);
+  session.systems.economy.addExoticParticles(500);
+  assert.equal(session.purchaseUpgrade('laboratory'), true);
+  const vent0 = session.getPart('vent1');
+  const cool0 = session.getPart('coolant_cell1');
+  const ex0 = session.getPart('heat_exchanger1');
+  assert.equal(session.purchaseUpgrade('fluid_hyperdynamics'), true);
+  assert.equal(session.getPart('vent1').vent, vent0.vent * 2);
+  assert.equal(session.getPart('heat_exchanger1').transfer, ex0.transfer * 2);
+  assert.equal(session.getPart('vent1').containment, vent0.containment);
+  assert.equal(session.purchaseUpgrade('fractal_piping'), true);
+  assert.equal(session.getPart('vent1').containment, vent0.containment * 2);
+  assert.equal(session.getPart('heat_exchanger1').containment, ex0.containment * 2);
+  assert.equal(session.purchaseUpgrade('ultracryonics'), true);
+  assert.equal(session.getPart('coolant_cell1').containment, cool0.containment * 2);
 });

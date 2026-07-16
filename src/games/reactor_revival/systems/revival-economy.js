@@ -33,6 +33,7 @@ export function createRevivalEconomy(manifest) {
     get soldHeat() { return soldHeat; },
     get lastTickAutoSold() { return lastTickAutoSold; },
     get lastTickIncome() { return lastTickIncome; },
+    get weaveQuantum() { return weaveQuantum; },
 
     addMoney(amount) {
       const d = toDecimal(amount);

@@ -5,6 +5,7 @@ export function createBaseModifiers() {
     ventEffectiveness: 1,
     ventCapacity: 1,
     transferEffectiveness: 1,
+    transferCapacity: 1,
     powerCapacity: 1,
     heatCapacity: 1,
     coolantCapacity: 1,
@@ -16,6 +17,8 @@ export function createBaseModifiers() {
     gridColsBonus: 0,
     reflectorDurationMultiplier: 1,
     reflectorPowerMultiplier: 1,
+    reflectorPowerPercent: 0,
+    reflectorPowerBonusLevels: 0,
     manualVentMultiplier: 1,
     manualVentPercent: 0,
     heatPowerMultiplier: 0,
@@ -64,8 +67,31 @@ export const EFFECT_HANDLERS = {
   vent_capacity(mods, def, level) {
     mods.ventCapacity *= 1 + (def.value || 0.01) * level;
   },
+  vent_boost(mods, def, level) {
+    const mult = 1 + (def.value ?? 1) * level;
+    mods.ventEffectiveness *= mult;
+    mods.ventCapacity *= mult;
+  },
   transfer_effectiveness(mods, def, level) {
     mods.transferEffectiveness *= 1 + (def.value || 0.01) * level;
+  },
+  transfer_capacity(mods, def, level) {
+    mods.transferCapacity *= 1 + (def.value || 0.01) * level;
+  },
+  transfer_boost(mods, def, level) {
+    const mult = 1 + (def.value ?? 1) * level;
+    mods.transferEffectiveness *= mult;
+    mods.transferCapacity *= mult;
+  },
+  fluid_hyperdynamics(mods, def, level) {
+    const mult = Math.pow(def.value || 2, level);
+    mods.ventEffectiveness *= mult;
+    mods.transferEffectiveness *= mult;
+  },
+  fractal_piping(mods, def, level) {
+    const mult = Math.pow(def.value || 2, level);
+    mods.ventCapacity *= mult;
+    mods.transferCapacity *= mult;
   },
   coolant_capacity(mods, def, level) {
     mods.coolantCapacity *= Math.pow(def.value || 2, level);
@@ -100,7 +126,10 @@ export const EFFECT_HANDLERS = {
     mods.reflectorDurationMultiplier *= Math.pow(def.value || 2, level);
   },
   reflector_power(mods, def, level) {
-    mods.reflectorPowerMultiplier *= Math.pow(def.value || 2, level);
+    mods.reflectorPowerPercent += (def.value ?? 0.01) * level;
+  },
+  reflector_power_bonus(mods, def, level) {
+    mods.reflectorPowerBonusLevels += (def.value ?? 1) * level;
   },
   perpetual_category(mods, def, level) {
     if (level > 0 && def.category) mods.perpetualCategories[def.category] = true;

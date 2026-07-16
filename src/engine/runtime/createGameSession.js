@@ -24,6 +24,10 @@ import {
 } from '../systems/blueprint.js';
 import { projectModifiersForHost } from '../systems/modifierProjection.js';
 import { isValidGridCoord } from '../kernel/gridUtils.js';
+import { listCompiledParts, getCompiledPart } from '../systems/partCatalog.js';
+import { resolvePartDisplayRates, resolveDisplayRates } from '../reactor/heat/effectiveRates.js';
+import { previewPrestige, calculateWeaveEp } from '../systems/prestige.js';
+import { partAutoReplaceCost } from '../systems/mechanicsPolicy.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -271,6 +275,8 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     setCanPurchaseExtra: (fn) => systems.upgrades?.setCanPurchaseExtra?.(fn),
     previewUpgrade: (id) => systems.upgrades?.previewPurchase?.(id, systems.economy, session) ?? null,
     listUpgrades: () => systems.upgrades?.listDisplayCatalog?.(session) ?? [],
+    listParts: () => listCompiledParts(session),
+    getPart: (id) => getCompiledPart(session, id),
     isUpgradeAvailable: (id) => systems.upgrades?.isAvailable?.(id, session) ?? false,
     getObjectiveProgress: (context = {}) => systems.objectives?.getCurrentProgress?.(session, context)
       ?? { completed: false, percent: 0, text: '' },
@@ -292,6 +298,25 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         session,
         computeSellValue: session.sellValuePolicy,
       });
+    },
+    resolveDisplayRates: (partIdOrInstOrDef) => {
+      if (partIdOrInstOrDef?.definition && typeof partIdOrInstOrDef.ticks === 'number') {
+        return resolveDisplayRates(partIdOrInstOrDef, grid, modifiers);
+      }
+      return resolvePartDisplayRates(partIdOrInstOrDef, session);
+    },
+    previewPrestige: (options) => previewPrestige(session, options),
+    calculatePrestigeReward: () => systems.economy?.calculatePrestigeReward?.()
+      ?? calculateWeaveEp(
+        systems.economy?.sessionPowerProduced,
+        systems.economy?.sessionHeatDissipated,
+        systems.economy?.weaveQuantum ?? manifest.economy?.weaveQuantum,
+      ),
+    partAutoReplaceCost: (partOrId) => {
+      const def = typeof partOrId === 'string'
+        ? registry.get(partOrId)
+        : partOrId;
+      return partAutoReplaceCost(def, mechanicsOverrides);
     },
     projectModifiers: () => projectModifiersForHost(modifiers),
     getHeatFlowVectors: () => engine.getLastHeatFlowVectors?.() ?? Object.freeze([]),
@@ -360,6 +385,8 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
         fuelCellCount: activeCells,
         sessionPowerProduced: toNumber(systems.economy.sessionPowerProduced),
         sessionHeatDissipated: toNumber(systems.economy.sessionHeatDissipated),
+        earned: systems.economy.calculatePrestigeReward?.() ?? 0,
+        weaveQuantum: systems.economy.weaveQuantum ?? manifest.economy?.weaveQuantum ?? 1_000_000,
       };
       const earned = systems.economy.reboot(resolved);
       grid.clearGrid();
@@ -369,8 +396,12 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       recompileModifiers();
       ruleset.onPrestige?.(session, resolved);
       events.emit('reboot', { earned, options: resolved, ...prestigePayload });
-      if (keepEp) events.emit('prestigeCompleted', prestigePayload);
+      if (keepEp) events.emit('prestigeCompleted', { ...prestigePayload, earned });
       return earned;
+    },
+
+    prestige(options = {}) {
+      return session.reboot({ keepEp: true, ...options, refundEp: false });
     },
 
     placeComponent(row, col, id) {

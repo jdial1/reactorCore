@@ -69,6 +69,33 @@ export function resolveContainment(inst) {
   return inst?.definition?.containment || inst?.definition?.baseContainment || 0;
 }
 
+export function resolveDisplayRates(instOrDef, grid, modifiers = {}) {
+  const inst = instOrDef?.definition ? instOrDef : { definition: instOrDef };
+  if (!inst.definition) return null;
+  const bonuses = computeGridMultiplierBonuses(grid, modifiers);
+  return Object.freeze({
+    vent: resolveVentRate(inst, bonuses),
+    transfer: resolveTransferRate(inst, bonuses),
+    containment: resolveContainment(inst),
+    baseVent: baseVentRate(inst),
+    baseTransfer: baseTransferRate(inst),
+    bonuses,
+  });
+}
+
+export function resolvePartDisplayRates(partIdOrDef, session) {
+  if (!session) return null;
+  const def = typeof partIdOrDef === 'string'
+    ? session.registry?.get?.(partIdOrDef)
+    : (partIdOrDef?.definition || partIdOrDef);
+  if (!def) return null;
+  return resolveDisplayRates(
+    { definition: def },
+    session.grid,
+    session.modifiers || {},
+  );
+}
+
 export function resolveSessionModifiers(ctx) {
   return ctx.session?.modifiers
     || ctx.upgrades?.compileModifiers?.()

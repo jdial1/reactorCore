@@ -10,11 +10,11 @@ const REVIVAL_EFFECTS = {
   perpetual_reflectors: { effect: 'perpetual_category', category: 'reflector' },
   improved_coolant_cells: { effect: 'coolant_capacity', value: 2 },
   improved_reflector_density: { effect: 'reflector_duration', value: 2 },
-  improved_neutron_reflection: { effect: 'reflector_power', value: 2 },
-  improved_heat_exchangers: { effect: 'transfer_effectiveness', value: 0.01 },
+  improved_neutron_reflection: { effect: 'reflector_power', value: 0.01 },
+  improved_heat_exchangers: { effect: 'transfer_boost', value: 1 },
   reinforced_heat_exchangers: { effect: 'transfer_plating', value: 1 },
   active_exchangers: { effect: 'transfer_capacitor', value: 1 },
-  improved_heat_vents: { effect: 'vent_effectiveness', value: 0.01 },
+  improved_heat_vents: { effect: 'vent_boost', value: 1 },
   improved_heatsinks: { effect: 'vent_plating', value: 1 },
   active_venting: { effect: 'vent_capacitor', value: 1 },
   improved_power_lines: { effect: 'auto_sell_percent', value: 1 },
@@ -39,6 +39,10 @@ const REVIVAL_EFFECTS = {
   isotope_stabilization: { effect: 'cell_ticks_global', value: 0.05 },
   component_reinforcement: { effect: 'component_reinforcement', value: 0.1 },
   experimental_protium_loader: { effect: 'protium_loader' },
+  full_spectrum_reflectors: { effect: 'reflector_power_bonus', value: 1 },
+  fluid_hyperdynamics: { effect: 'fluid_hyperdynamics', value: 2 },
+  fractal_piping: { effect: 'fractal_piping', value: 2 },
+  ultracryonics: { effect: 'coolant_capacity', value: 2 },
 };
 
 const CELL_TYPES = new Set([

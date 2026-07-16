@@ -4,6 +4,7 @@ import { runCellPhase } from './cellPhase.js';
 import { runHeatPipeline, runVentPhase } from '../heat/heatPipeline.js';
 import { collectOverpressureExplosions, explodeComponent } from '../explosions.js';
 import { runReactorMechanicsPhase } from '../reactorMechanics.js';
+import { partAutoReplaceCost } from '../../systems/mechanicsPolicy.js';
 
 export function createIncrementalPhaseRunners(manifest, policy = {}) {
   const base = createPhaseRunners(manifest.features);
@@ -16,7 +17,7 @@ export function createIncrementalPhaseRunners(manifest, policy = {}) {
       return false;
     });
   const autoReplaceCost = policy.autoReplaceCost
-    ?? ((def) => def.baseCost || 0);
+    ?? ((def, overrides = {}) => partAutoReplaceCost(def, overrides));
 
   return {
     ...base,
@@ -103,15 +104,11 @@ export function createRevivalAutomationPolicy(manifest) {
       return false;
     },
     autoReplaceCost(def, overrides = {}) {
-      const base = overrides.autoReplaceCosts?.[def.id] ?? (def.baseCost || 0);
-      if (def.category === 'cell' || def.category === 'reflector' || def.category === 'capacitor') return base * 1.5;
-      return base;
+      if (overrides.autoReplaceCosts?.[def.id] != null) return overrides.autoReplaceCosts[def.id];
+      return partAutoReplaceCost(def, overrides);
     },
     onReplace(row, col, def, economy, overrides = {}) {
-      const cost = overrides.autoReplaceCosts?.[def.id]
-        ?? ((def.category === 'cell' || def.category === 'reflector' || def.category === 'capacitor')
-          ? (def.baseCost || 0) * 1.5
-          : (def.baseCost || 0));
+      const cost = overrides.autoReplaceCosts?.[def.id] ?? partAutoReplaceCost(def, overrides);
       return economy.spendMoney(cost);
     },
   };
