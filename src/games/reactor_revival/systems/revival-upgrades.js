@@ -35,9 +35,36 @@ const REVIVAL_EFFECTS = {
   laboratory: { effect: 'unlock_experimental' },
   infused_cells: { effect: 'power_multiplier', value: 2 },
   unleashed_cells: { effect: 'heat_multiplier', value: 2 },
+  unstable_protium: { effect: 'unstable_protium' },
 };
 
-export function createRevivalUpgradeStore(manifest) {
+const CELL_TYPES = new Set([
+  'cell', 'uranium', 'plutonium', 'thorium', 'seaborgium', 'dolorium', 'nefastium', 'protium',
+]);
+
+function buildCellPowerUpgrades(components) {
+  const out = [];
+  for (const part of components || []) {
+    if ((part.level ?? 1) !== 1) continue;
+    if (!CELL_TYPES.has(part.type) && part.category !== 'cell') continue;
+    if (part.cellPowerUpgradeCost == null) continue;
+    const cellType = part.type || 'cell';
+    out.push({
+      id: `${part.id}_cell_power`,
+      title: `Potent ${part.title || part.id}`,
+      baseCost: part.cellPowerUpgradeCost,
+      costMultiplier: part.cellPowerUpgradeMultiplier ?? part.costMultiplier ?? 10,
+      maxLevel: null,
+      currency: 'money',
+      effect: 'cell_power',
+      cellType,
+      value: 2,
+    });
+  }
+  return out;
+}
+
+export function createRevivalUpgradeStore(manifest, options = {}) {
   const flatUpgrades = (manifest.upgrades || []).map((u) => {
     const mapped = REVIVAL_EFFECTS[u.actionId] || REVIVAL_EFFECTS[u.id] || {};
     return {
@@ -55,5 +82,10 @@ export function createRevivalUpgradeStore(manifest) {
     };
   });
 
-  return createUpgradeStore({ ...manifest, upgrades: flatUpgrades });
+  flatUpgrades.push(...buildCellPowerUpgrades(manifest.components));
+
+  return createUpgradeStore(
+    { ...manifest, upgrades: flatUpgrades },
+    { canPurchaseExtra: options.canPurchaseExtra },
+  );
 }

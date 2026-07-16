@@ -1,6 +1,6 @@
 {
   "name": "reactor-core-lib",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shared reactor simulation engine for Reactor Revival and related games",
   "type": "module",
   "license": "ISC",
@@ -14,11 +14,20 @@
   },
   "homepage": "https://github.com/jdial1/reactorCore#readme",
   "files": [
-    "src"
+    "src",
+    "README.md"
   ],
   "exports": {
     ".": "./src/index.js",
     "./games/*": "./src/games/*"
+  },
+  "peerDependencies": {
+    "decimal.js": ">=10.0.0"
+  },
+  "peerDependenciesMeta": {
+    "decimal.js": {
+      "optional": false
+    }
   },
   "publishConfig": {
     "access": "public"

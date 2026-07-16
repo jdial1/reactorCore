@@ -20,13 +20,20 @@ export { toNum, countById, neighborInstances, createSustainedTracker, CARDINAL_O
 export { createObjectiveSystem, createAchievementSystem } from './engine/systems/progression.js';
 export { createFailureSystem } from './engine/systems/failure.js';
 export { deriveReactorStats, createReactorStatsComputer } from './engine/systems/reactorStats.js';
-export { computeNeighborPulseN, runCellPhase } from './engine/reactor/phases/cellPhase.js';
+export {
+  computeNeighborPulseN,
+  runCellPhase,
+  computeCellOutput,
+  resolveCellCoefficients,
+} from './engine/reactor/phases/cellPhase.js';
 export { runHeatPipeline, runVentPhase } from './engine/reactor/heat/heatPipeline.js';
+export { buildContainmentSegments } from './engine/reactor/heat/containmentSegments.js';
 export { collectOverpressureExplosions, explodeComponent, applyHullRepulsion } from './engine/reactor/explosions.js';
 export { runReactorMechanicsPhase } from './engine/reactor/reactorMechanics.js';
 export {
   applyBlueprintLayoutDiff,
   computeBlueprintDiff,
+  computeBlueprintCostBreakdown,
   layoutFromPlannerSlots,
   gridToLayout,
   clipToGrid,

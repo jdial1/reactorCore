@@ -69,6 +69,9 @@
     "meltdownHeatMultiplier": 2,
     "gracePeriodTicks": 30,
     "hullRepelFraction": 0.05,
+    "criticalHeatRatio": 0.85,
+    "highHeatRatio": 0.7,
+    "baseManualHeatReduce": 1,
     "offlineProgression": true,
     "valve": {
       "overflowThreshold": 0.8,

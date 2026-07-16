@@ -74,11 +74,23 @@ function registerDefaultCommands() {
     return sold;
   });
   registerCommand('VENT_HEAT', (session) => {
-    const vented = session.grid.currentHeat;
-    if (vented <= 0) return false;
-    session.grid.currentHeat = 0;
-    session.events?.emit('ventHeat', { amount: vented });
-    return vented;
+    const heat = session.grid.currentHeat;
+    if (heat <= 0) return false;
+    const modifiers = session.modifiers || {};
+    const baseReduce = (session.manifest?.mechanics?.baseManualHeatReduce ?? 1)
+      * (modifiers.manualVentMultiplier || 1);
+    const reduction = baseReduce + (session.grid.maxHeat || 0) * (modifiers.manualVentPercent || 0);
+    const amount = Math.min(heat, Math.max(0, reduction));
+    if (amount <= 0) return false;
+    const remaining = Math.max(0, heat - amount);
+    session.grid.currentHeat = remaining <= 0.001 ? 0 : remaining;
+    const finalRemaining = session.grid.currentHeat;
+    session.events?.emit('ventHeat', { amount, remaining: finalRemaining });
+    if (finalRemaining <= 0.001 && amount > 0) {
+      session.systems.objectives?.setFlags?.({ soldHeat: true });
+      session.events?.emit('soldHeat', { amount });
+    }
+    return amount;
   });
   registerCommand('SET_TOGGLE', (session, { toggleName, value }) => {
     if (!session.toggles) session.toggles = {};
@@ -174,6 +186,7 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
 
   let paused = false;
   let isCatchingUp = false;
+  let lastHeatWarningLevel = null;
   const toggles = { pause: false, auto_sell: false, auto_buy: false, heat_control: false, time_flux: true };
 
   const session = {
@@ -218,7 +231,21 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     tick(options = {}) {
       if (paused || engine.meltdown) return engine.getLastResult();
       const multiplier = typeof options === 'number' ? options : (options.multiplier ?? 1);
-      return engine.tick({ session, commands, registry, events, multiplier });
+      const result = engine.tick({ session, commands, registry, events, multiplier });
+      const maxHeat = grid.maxHeat || 0;
+      const heatRatio = maxHeat > 0 ? (grid.currentHeat || 0) / maxHeat : 0;
+      const criticalHeatRatio = manifest.mechanics?.criticalHeatRatio ?? 0.85;
+      const highHeatRatio = manifest.mechanics?.highHeatRatio ?? 0.7;
+      let heatWarningLevel = null;
+      if (heatRatio >= criticalHeatRatio) heatWarningLevel = 'critical';
+      else if (heatRatio >= highHeatRatio) heatWarningLevel = 'high';
+      result.heatRatio = heatRatio;
+      result.heatWarningLevel = heatWarningLevel;
+      if (heatWarningLevel !== lastHeatWarningLevel) {
+        events.emit('heatWarning', { ratio: heatRatio, level: heatWarningLevel });
+      }
+      lastHeatWarningLevel = heatWarningLevel;
+      return result;
     },
 
     runTicks(n) {
@@ -237,12 +264,16 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
 
     purchaseUpgrade(id) {
       if (!systems.upgrades || !systems.economy) return false;
-      const ok = systems.upgrades.purchase(id, systems.economy);
-      if (ok) {
-        recompileModifiers();
-        events.emit('upgradePurchased', { id });
-      }
-      return ok;
+      if (systems.failure?.hasMeltedDown || engine.meltdown) return false;
+      const result = systems.upgrades.purchase(id, systems.economy, session);
+      if (!result?.ok) return false;
+      recompileModifiers();
+      events.emit('upgradePurchased', {
+        id,
+        newLevel: result.newLevel,
+        spent: result.spent,
+      });
+      return true;
     },
 
     reboot(options) {
@@ -262,12 +293,14 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       const inst = registry.create(id);
       if (!inst) return false;
       grid.setComponentAt(row, col, inst);
+      grid.recalculateCaps();
       events.emit('partPlaced', { row, col, id });
       return true;
     },
 
     removeComponent(row, col) {
       grid.setComponentAt(row, col, null);
+      grid.recalculateCaps();
       events.emit('partRemoved', { row, col });
     },
 
@@ -306,22 +339,31 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     },
 
     getSnapshot() {
+      const failure = systems.failure?.serialize?.();
+      const stats = systems.stats?.compute?.({
+        grid,
+        modifiers,
+        upgrades: systems.upgrades,
+        economy: systems.economy,
+        mechanicsOverrides: session.mechanicsOverrides,
+        toggles,
+      });
       const snapshot = {
         grid: grid.getSnapshot(),
         economy: systems.economy?.serialize(),
         upgrades: systems.upgrades?.serialize(),
-        failure: systems.failure?.serialize?.(),
+        failure,
+        failureState: failure?.failureState,
+        hullIntegrity: failure?.hullIntegrity,
+        hasMeltedDown: failure?.hasMeltedDown,
+        gracePeriodTicks: failure?.gracePeriodTicks,
         objectives: systems.objectives?.serialize?.(),
         achievements: systems.achievements?.serialize?.() ?? [...session.achievements],
-        stats: manifest.features?.objectives || manifest.features?.achievements
-          ? systems.stats?.compute?.({
-            grid,
-            modifiers,
-            upgrades: systems.upgrades,
-            economy: systems.economy,
-            mechanicsOverrides: session.mechanicsOverrides,
-          })
-          : undefined,
+        stats,
+        heatRatio: stats?.heatRatio,
+        heatWarningLevel: stats?.heatWarningLevel,
+        powerNetChange: stats?.powerNetChange,
+        heatNetChange: stats?.heatNetChange,
         engine: { tickCount: engine.tickCount, meltdown: engine.meltdown },
         toggles: { ...toggles },
         techTree: session.techTree,

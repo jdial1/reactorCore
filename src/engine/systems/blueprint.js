@@ -86,6 +86,10 @@ export function computeBlueprintDiff(session, targetLayout, policy = {}) {
   return { toRemove, toPlace, unchanged, breakdown };
 }
 
+export function computeBlueprintCostBreakdown(session, targetLayout, policy = {}) {
+  return computeBlueprintDiff(session, targetLayout, policy).breakdown;
+}
+
 function checkAffordability(session, breakdown, sellCredit = 0) {
   const economy = session.systems.economy;
   if (!economy) return null;
@@ -187,11 +191,25 @@ export function applyBlueprintLayoutDiff(session, targetLayout, options = {}, po
     }
   }
 
+  session.grid.recalculateCaps();
+  const stats = session.systems?.stats?.compute?.({
+    grid: session.grid,
+    modifiers: session.modifiers,
+    upgrades: session.systems.upgrades,
+    economy: session.systems.economy,
+    mechanicsOverrides: session.mechanicsOverrides,
+    toggles: session.toggles,
+  });
+
   return {
     ok: true,
     placed: placements.length,
     removed: diff.toRemove.length,
     partial: !!options.partial,
     breakdown: diff.breakdown,
+    netHeat: stats?.netHeat,
+    power: stats?.power,
+    maxPower: session.grid.maxPower,
+    maxHeat: session.grid.maxHeat,
   };
 }

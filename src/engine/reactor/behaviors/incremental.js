@@ -31,13 +31,17 @@ export function buildIncrementalCell(spec, modifiers = {}) {
   } = spec;
   const basePower = specStat(spec, 'power');
   const baseHeat = specStat(spec, 'heat');
-  const baseTicks = specStat(spec, 'ticks') || spec.baseTicks || 0;
+  let baseTicks = specStat(spec, 'ticks') || spec.baseTicks || 0;
+  const partType = spec.type || '';
+  if (partType === 'protium' && (modifiers.unstableProtiumLevel || 0) > 0) {
+    baseTicks = Math.max(1, Math.floor(baseTicks * Math.pow(0.5, modifiers.unstableProtiumLevel)));
+  }
 
   return createDef({
     id,
     name: id,
     title,
-    type: spec.type || '',
+    type: partType,
     category: category || 'cell',
     displayName: title,
     maxHeat: 1,
@@ -217,25 +221,17 @@ export function buildIncrementalOutlet(spec, modifiers = {}) {
 
 export function buildIncrementalCapacitor(spec, modifiers = {}) {
   const { id, title, category, autoSellPercent = 0, baseCost, extreme = false } = spec;
-  const power = specStat(spec, 'power');
+  const reactorPower = specStat(spec, 'reactorPower') || specStat(spec, 'power');
   const containment = specStat(spec, 'containment');
-  const effectivePower = Math.floor(power * (modifiers.powerCapacity || 1));
+  const effectivePower = Math.floor(reactorPower * (modifiers.powerCapacity || 1));
   const effectiveContainment = Math.floor(containment * (modifiers.heatCapacity || 1));
 
   return createDef({
     id, name: id, title, category: category || 'capacitor', displayName: title,
-    maxHeat: effectiveContainment, power: effectivePower, containment: effectiveContainment,
+    maxHeat: effectiveContainment, power: 0, reactorPower: effectivePower,
+    powerAdjustment: effectivePower, containment: effectiveContainment,
     autoSellPercent, baseCost, extreme,
     capacitorAutosellHeatRatio: spec.capacitorAutosellHeatRatio || 0,
-
-    onAddToGrid: (_, grid) => {
-      grid.adjustMaxPower(effectivePower);
-      grid.adjustMaxHeat(effectiveContainment);
-    },
-    onRemoveFromGrid: (_, grid) => {
-      grid.adjustMaxPower(-effectivePower);
-      grid.adjustMaxHeat(-effectiveContainment);
-    },
   });
 }
 
@@ -267,15 +263,18 @@ export function buildIncrementalCoolant(spec, modifiers = {}) {
 
 export function buildIncrementalPlating(spec, modifiers = {}) {
   const { id, title, category, baseCost } = spec;
-  const containment = specStat(spec, 'containment');
-  const effectiveContainment = Math.floor(containment * (modifiers.platingCapacity || 1));
+  const reactorHeat = specStat(spec, 'reactorHeat') || specStat(spec, 'containment');
+  const reactorPower = specStat(spec, 'reactorPower');
+  const heatMult = (modifiers.platingCapacity || 1) * (1 + (modifiers.platingHeatBonus || 0));
+  const effectiveHeat = Math.floor(reactorHeat * heatMult);
+  const effectivePower = Math.floor(reactorPower * (modifiers.powerCapacity || 1));
 
   return createDef({
     id, name: id, title, category: category || 'reactor_plating', displayName: title,
-    heatAdjustment: effectiveContainment, baseCost,
-
-    onAddToGrid: (_, grid) => grid.adjustMaxHeat(effectiveContainment),
-    onRemoveFromGrid: (_, grid) => grid.adjustMaxHeat(-effectiveContainment),
+    heatAdjustment: effectiveHeat,
+    reactorPower: effectivePower,
+    powerAdjustment: effectivePower,
+    baseCost,
   });
 }
 

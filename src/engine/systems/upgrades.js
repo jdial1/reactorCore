@@ -13,10 +13,16 @@ function spendEp(economy, cost) {
   return true;
 }
 
+function normalizeErequires(erequires) {
+  if (!erequires) return [];
+  return Array.isArray(erequires) ? erequires : [erequires];
+}
+
 export function createUpgradeStore(manifest, options = {}) {
   const levels = new Map();
   const upgradeDefs = manifest.upgrades || {};
   const effectRegistry = createEffectRegistry(options.effects);
+  const canPurchaseExtra = options.canPurchaseExtra || null;
 
   function flattenUpgrades(obj, prefix = '') {
     const result = [];
@@ -30,7 +36,9 @@ export function createUpgradeStore(manifest, options = {}) {
     return result;
   }
 
-  const allUpgrades = flattenUpgrades(upgradeDefs);
+  const allUpgrades = Array.isArray(upgradeDefs)
+    ? upgradeDefs
+    : flattenUpgrades(upgradeDefs);
   const upgradeMap = new Map(allUpgrades.map((u) => [u.id, u]));
   let cachedModifiers = null;
 
@@ -53,15 +61,14 @@ export function createUpgradeStore(manifest, options = {}) {
       return Math.floor(base * Math.pow(multiplier, level));
     },
 
-    canPurchase(id, economy) {
+    canPurchase(id, economy, session = null) {
       const def = upgradeMap.get(id);
       if (!def) return false;
       if (def.maxLevel != null && this.getLevel(id) >= def.maxLevel) return false;
-      if (def.erequires) {
-        for (const req of def.erequires) {
-          if (this.getLevel(req) <= 0 && toNum(economy.currentExoticParticles) < 1) return false;
-        }
+      for (const req of normalizeErequires(def.erequires)) {
+        if (this.getLevel(req) <= 0) return false;
       }
+      if (canPurchaseExtra && !canPurchaseExtra(session, id, def)) return false;
       const cost = this.getCost(id);
       const currency = def.currency || 'money';
       if (currency === 'ep' || currency === 'exotic_particles') {
@@ -70,19 +77,24 @@ export function createUpgradeStore(manifest, options = {}) {
       return toNum(economy.money) >= cost;
     },
 
-    purchase(id, economy) {
-      if (!this.canPurchase(id, economy)) return false;
+    purchase(id, economy, session = null) {
+      if (!this.canPurchase(id, economy, session)) return false;
       const def = upgradeMap.get(id);
       const cost = this.getCost(id);
       const currency = def.currency || 'money';
+      const spent = { money: 0, ep: 0 };
       if (currency === 'ep' || currency === 'exotic_particles') {
         if (!spendEp(economy, cost)) return false;
+        spent.ep = cost;
       } else if (!economy.spendMoney(cost)) {
         return false;
+      } else {
+        spent.money = cost;
       }
-      levels.set(id, this.getLevel(id) + 1);
+      const newLevel = this.getLevel(id) + 1;
+      levels.set(id, newLevel);
       cachedModifiers = null;
-      return true;
+      return { ok: true, id, newLevel, spent };
     },
 
     getAutoSellPercent() {

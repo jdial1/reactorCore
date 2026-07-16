@@ -133,6 +133,7 @@ export function createReactorGrid(manifest) {
           }
         }
       }
+      reactorGrid.recalculateCaps();
     },
 
     adjustCurrentHeat(amount) {
@@ -177,6 +178,7 @@ export function createReactorGrid(manifest) {
           reactorGrid.setComponentAt(r, c, null);
         }
       }
+      reactorGrid.recalculateCaps();
     },
 
     getComponentCount() {
@@ -221,8 +223,11 @@ export function createReactorGrid(manifest) {
       reactorGrid.maxHeat = defaults.baseMaxHeat;
       reactorGrid.maxPower = defaults.baseMaxPower || 0;
       reactorGrid.forEach((_, __, inst) => {
-        if (inst?.definition.heatAdjustment) reactorGrid.maxHeat += inst.definition.heatAdjustment;
-        if (inst?.definition.power) reactorGrid.maxPower += inst.definition.power;
+        const def = inst?.definition;
+        if (!def) return;
+        if (def.heatAdjustment) reactorGrid.maxHeat += def.heatAdjustment;
+        const powerAdj = def.powerAdjustment ?? def.reactorPower ?? 0;
+        if (powerAdj) reactorGrid.maxPower += powerAdj;
       });
     },
 
@@ -324,6 +329,7 @@ export function createHistoryManager(grid, registry) {
           }
         }
       }
+      grid.recalculateCaps();
     },
   };
 }

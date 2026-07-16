@@ -32,7 +32,7 @@ export function createRuleset({ manifest }) {
         failure: createFailureSystem(m),
         objectives: createObjectiveSystem(m, { hooks }),
         achievements: m.features?.achievements ? createRevivalAchievements(m, { hooks }) : undefined,
-        stats: createReactorStatsComputer(m),
+        stats: createReactorStatsComputer({ manifest: m }),
       };
     },
 

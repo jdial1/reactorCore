@@ -52,29 +52,53 @@ function processReflectorNeighbors(grid, row, col, multiplier, offsets = CARDINA
   }
 }
 
-function resolveCellPower(def, inst) {
-  if (typeof inst._effectivePower === 'number') return inst._effectivePower;
-  return def.basePower ?? def.power ?? 0;
+export function resolveCellCoefficients(def, options = {}) {
+  let power = def.basePower ?? def.power ?? 0;
+  let heat = def.baseHeat ?? def.heat ?? 0;
+  const modifiers = options.modifiers || {};
+  const powerMult = modifiers.powerMultiplier || 1;
+  const heatMult = modifiers.heatMultiplier || 1;
+  power *= powerMult;
+  heat *= heatMult;
+
+  const typeLevel = modifiers.cellPowerByType?.[def.type] || 0;
+  if (typeLevel > 0) power *= Math.pow(2, typeLevel);
+
+  if (def.type === 'protium') {
+    const unstable = modifiers.unstableProtiumLevel || 0;
+    if (unstable > 0) {
+      power *= Math.pow(2, unstable);
+      heat *= Math.pow(0.5, unstable);
+    }
+    const depleted = options.protiumParticles ?? 0;
+    if (depleted > 0) heat *= (1 + 0.10 * depleted);
+  }
+
+  return { power, heat };
 }
 
-function resolveCellHeat(def, inst) {
-  if (typeof inst._effectiveHeat === 'number') return inst._effectiveHeat;
-  return def.baseHeat ?? def.heat ?? 0;
-}
-
-export function computeCellOutput(def, inst, pulse, reflectorCount, reflectorCooling, multiplier = 1) {
+export function computeCellOutput(def, inst, pulse, reflectorCount, reflectorCooling, multiplier = 1, options = {}) {
   let heatMult = 1;
   if (reflectorCooling > 0 && reflectorCount > 0) {
     heatMult = Math.max(0.1, 1 - reflectorCount * reflectorCooling);
   }
   const c = Math.max(1, def.cellCount ?? 1);
-  const lp = resolveCellPower(def, inst);
-  const hEff = resolveCellHeat(def, inst) * heatMult;
-  const layoutPower = typeof inst._effectivePower === 'number' ? inst._effectivePower : lp * pulse;
-  const generatedHeat = typeof inst._effectiveHeat === 'number'
-    ? inst._effectiveHeat * multiplier
-    : ((hEff * pulse * pulse) / c) * multiplier;
-  return { layoutPower, generatedHeat, heatMult };
+  const honorHost = options.honorHostEffective === true;
+  if (honorHost && typeof inst?._effectivePower === 'number' && typeof inst?._effectiveHeat === 'number') {
+    return {
+      layoutPower: inst._effectivePower,
+      generatedHeat: inst._effectiveHeat * multiplier,
+      heatMult,
+      pulse,
+    };
+  }
+
+  const coeffs = options.coefficients || resolveCellCoefficients(def, options);
+  const lp = coeffs.power;
+  const hEff = coeffs.heat * heatMult;
+  const layoutPower = lp * pulse;
+  const generatedHeat = ((hEff * pulse * pulse) / c) * multiplier;
+  return { layoutPower, generatedHeat, heatMult, pulse };
 }
 
 export function runCellPhase(ctx, policy = {}) {
@@ -84,8 +108,17 @@ export function runCellPhase(ctx, policy = {}) {
   let heatAdd = 0;
   const reflectorCooling = policy.reflectorCooling?.(ctx)
     ?? ctx.session?.mechanicsOverrides?.reflectorCoolingFactor
+    ?? ctx.session?.modifiers?.reflectorCoolingFactor
     ?? ctx.upgrades?.getModifier?.('reflector_cooling_factor')
     ?? 0;
+  const modifiers = ctx.session?.modifiers || ctx.upgrades?.compileModifiers?.() || {};
+  const protiumParticles = ctx.economy?.protiumParticles ?? ctx.session?.systems?.economy?.protiumParticles ?? 0;
+  const cellOutputs = [];
+  const coeffOptions = {
+    modifiers,
+    protiumParticles,
+    honorHostEffective: policy.honorHostEffective === true,
+  };
 
   grid.forEach((row, col, inst) => {
     if (!inst || inst.pendingDestruction || isBroken(inst)) return;
@@ -103,7 +136,9 @@ export function runCellPhase(ctx, policy = {}) {
     const m = def.cellMultiplier ?? def.pulseMultiplier ?? 1;
     const n = computeNeighborPulseN(grid, row, col);
     const pulse = m + n;
-    const { layoutPower, generatedHeat } = computeCellOutput(def, inst, pulse, reflectorCount, reflectorCooling, multiplier);
+    const { layoutPower, generatedHeat } = computeCellOutput(
+      def, inst, pulse, reflectorCount, reflectorCooling, multiplier, coeffOptions,
+    );
 
     if (active) {
       powerAdd += layoutPower * multiplier;
@@ -118,6 +153,15 @@ export function runCellPhase(ctx, policy = {}) {
     inst.ticks -= multiplier;
     inst.currentDamage = (def.baseTicks || def.maxDamage) - inst.ticks;
     processReflectorNeighbors(grid, row, col, multiplier);
+    cellOutputs.push({
+      row,
+      col,
+      power: layoutPower * (active ? multiplier : 1),
+      heat: generatedHeat,
+      pulseN: n,
+      pulse,
+      reflectorCount,
+    });
     policy.onCellDepleted?.(ctx, { row, col, inst, def });
   });
 
@@ -126,5 +170,6 @@ export function runCellPhase(ctx, policy = {}) {
 
   ctx.result.heatOutput = (ctx.result.heatOutput || 0) + heatAdd;
   ctx.result.powerOutput = (ctx.result.powerOutput || 0) + powerAdd;
-  return { powerAdd, heatAdd };
+  ctx.result.cellOutputs = cellOutputs;
+  return { powerAdd, heatAdd, cellOutputs };
 }

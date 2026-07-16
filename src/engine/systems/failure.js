@@ -14,8 +14,9 @@ export function createFailureSystem(manifest) {
   const meltdownMultiplier = failureMech.meltdownHeatMultiplier
     ?? manifest.mechanics?.meltdownHeatMultiplier ?? MELTDOWN_HEAT_MULTIPLIER;
   const fragmentationChance = failureMech.fragmentationExplosionChance ?? FRAGMENTATION_EXPLOSION_CHANCE;
+  const defaultGrace = manifest.mechanics?.gracePeriodTicks ?? failureMech.gracePeriodTicks ?? 30;
 
-  let gracePeriodTicks = manifest.mechanics?.gracePeriodTicks ?? failureMech.gracePeriodTicks ?? 30;
+  let gracePeriodTicks = defaultGrace;
   let failureState = 'nominal';
   let hullIntegrity = 100;
   let hasMeltedDown = false;
@@ -46,13 +47,34 @@ export function createFailureSystem(manifest) {
     ctx.session?.events?.emit('fragmentationExplosion', { row: target.row, col: target.col });
   }
 
+  function writeResult(ctx) {
+    ctx.result.meltdown = hasMeltedDown || !!ctx.result.meltdown;
+    ctx.result.failureState = failureState;
+    ctx.result.hullIntegrity = hullIntegrity;
+    ctx.result.hasMeltedDown = hasMeltedDown;
+    ctx.result.gracePeriodTicks = gracePeriodTicks;
+  }
+
+  function transition(ctx, nextState) {
+    if (nextState === failureState) return;
+    const from = failureState;
+    failureState = nextState;
+    ctx.session?.events?.emit('failureStateChanged', {
+      from,
+      to: nextState,
+      hullIntegrity,
+      gracePeriodTicks,
+    });
+  }
+
   function triggerMeltdown(ctx) {
     hasMeltedDown = true;
-    failureState = 'criticality';
+    transition(ctx, 'criticality');
     hullIntegrity = 0;
     ctx.result.meltdown = true;
     ctx.meltdown = true;
     ctx.session?.events?.emit('meltdown', { tickCount: ctx.session?.engine?.tickCount ?? 0 });
+    writeResult(ctx);
   }
 
   return {
@@ -68,16 +90,16 @@ export function createFailureSystem(manifest) {
     evaluate(ctx) {
       if (hasMeltedDown) {
         ctx.result.meltdown = true;
+        writeResult(ctx);
         return true;
       }
 
       if (gracePeriodTicks > 0) {
         gracePeriodTicks--;
-        failureState = 'nominal';
+        transition(ctx, 'nominal');
         hullIntegrity = 100;
         ctx.result.meltdown = false;
-        ctx.result.failureState = failureState;
-        ctx.result.hullIntegrity = hullIntegrity;
+        writeResult(ctx);
         return false;
       }
 
@@ -90,21 +112,20 @@ export function createFailureSystem(manifest) {
       }
 
       if (heat < max) {
-        failureState = 'nominal';
+        transition(ctx, 'nominal');
         hullIntegrity = 100;
         ctx.result.meltdown = false;
-        ctx.result.failureState = failureState;
-        ctx.result.hullIntegrity = hullIntegrity;
+        writeResult(ctx);
         return false;
       }
 
-      if (heat >= max && heat < max * 1.1) failureState = 'saturation';
+      if (heat >= max && heat < max * 1.1) transition(ctx, 'saturation');
       else if (heat >= max * 1.1 && hullIntegrity > 0) {
-        failureState = 'repulsion';
+        transition(ctx, 'repulsion');
         const overpressure = (heat - max * 1.1) / max;
         hullIntegrity = Math.max(0, hullIntegrity - overpressure * 5);
       } else if (hullIntegrity <= 0 && heat < max * meltdownMultiplier) {
-        failureState = 'fragmentation';
+        transition(ctx, 'fragmentation');
         tryFragmentationExplosion(ctx, FRAGMENTATION_SALT_STRUCTURAL);
       }
 
@@ -114,8 +135,7 @@ export function createFailureSystem(manifest) {
       }
 
       ctx.result.meltdown = false;
-      ctx.result.failureState = failureState;
-      ctx.result.hullIntegrity = hullIntegrity;
+      writeResult(ctx);
       return false;
     },
 
@@ -123,6 +143,7 @@ export function createFailureSystem(manifest) {
       failureState = 'nominal';
       hullIntegrity = 100;
       hasMeltedDown = false;
+      gracePeriodTicks = defaultGrace;
     },
 
     serialize() {

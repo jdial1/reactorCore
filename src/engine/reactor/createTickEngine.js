@@ -12,6 +12,7 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
   let allFuelRodsDepleted = false;
   let active = true;
   let currentEnvironment = null;
+  let lastResult = null;
 
   const defaultStages = features.generatesMoney
     ? ['preTick', 'generateHeat', 'destroy', 'economy', 'meltdown']
@@ -52,6 +53,11 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
         hullHeat: 0,
         destroyedComponents: [],
         enrichedCells: [],
+        cellOutputs: [],
+        failureState: systems.failure?.failureState,
+        hullIntegrity: systems.failure?.hullIntegrity,
+        hasMeltedDown: systems.failure?.hasMeltedDown,
+        gracePeriodTicks: systems.failure?.gracePeriodTicks,
       },
     };
   }
@@ -105,11 +111,14 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
       ctx.result.hullHeat = grid.currentHeat;
       meltdown = ctx.result.meltdown;
       tickCount++;
+      lastResult = ctx.result;
       hooks.emit('tick:after', ctx);
       return ctx.result;
     },
 
     getLastResult() {
+      if (lastResult) return lastResult;
+      const failure = systems.failure;
       return {
         euOutput: grid.euOutput,
         powerOutput: grid.powerOutput,
@@ -119,6 +128,11 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
         hullHeat: grid.currentHeat,
         destroyedComponents: [],
         enrichedCells: [],
+        failureState: failure?.failureState,
+        hullIntegrity: failure?.hullIntegrity,
+        hasMeltedDown: failure?.hasMeltedDown,
+        gracePeriodTicks: failure?.gracePeriodTicks,
+        cellOutputs: [],
       };
     },
 
@@ -181,6 +195,7 @@ export function createTickEngine(grid, manifest, hooks, systems = {}, options = 
       tickCount = 0;
       meltdown = false;
       allFuelRodsDepleted = false;
+      lastResult = null;
       grid.resetHeat();
       grid.resetPower();
     },

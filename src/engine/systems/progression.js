@@ -21,7 +21,10 @@ export function createObjectiveSystem(manifest, { hooks, checks, buildView, onCo
   const flags = {};
 
   hooks?.on?.('game:sellPower', () => { flags.soldPower = true; });
-  hooks?.on?.('game:ventHeat', () => { flags.soldHeat = true; });
+  hooks?.on?.('game:ventHeat', (payload) => {
+    if (payload?.remaining == null || payload.remaining <= 0.001) flags.soldHeat = true;
+  });
+  hooks?.on?.('game:soldHeat', () => { flags.soldHeat = true; });
 
   function chapterProgress(chapterIdx) {
     const range = chapterRanges[chapterIdx];

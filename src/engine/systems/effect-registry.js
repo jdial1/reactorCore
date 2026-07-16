@@ -37,6 +37,8 @@ export function createBaseModifiers() {
     autoBuyFromUpgrade: false,
     experimentalUnlocked: false,
     perpetualCategories: {},
+    cellPowerByType: {},
+    unstableProtiumLevel: 0,
   };
 }
 
@@ -150,6 +152,14 @@ export const EFFECT_HANDLERS = {
   },
   unlock_experimental(mods, def, level) {
     mods.experimentalUnlocked = level > 0;
+  },
+  cell_power(mods, def, level) {
+    const cellType = def.cellType || def.partType;
+    if (!cellType || level <= 0) return;
+    mods.cellPowerByType[cellType] = level;
+  },
+  unstable_protium(mods, def, level) {
+    mods.unstableProtiumLevel = level;
   },
 };
 
