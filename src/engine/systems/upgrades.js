@@ -61,6 +61,43 @@ export function createUpgradeStore(manifest, options = {}) {
     getAllDefinitions: () => [...upgradeMap.values()],
     setCanPurchaseExtra: (fn) => { canPurchaseExtra = fn || null; },
 
+    isAvailable(id, session = null) {
+      const def = upgradeMap.get(id);
+      if (!def) return false;
+      if (def.maxLevel != null && store.getLevel(id) >= def.maxLevel) return false;
+      for (const req of normalizeErequires(def.erequires)) {
+        if (store.getLevel(req) <= 0) return false;
+      }
+      if (canPurchaseExtra && !canPurchaseExtra(session, id, def)) return false;
+      return true;
+    },
+
+    listDisplayCatalog(session = null) {
+      return [...upgradeMap.values()].map((def) => {
+        const level = store.getLevel(def.id);
+        const preview = store.previewPurchase(def.id, null, session);
+        return {
+          id: def.id,
+          title: def.title || def.id,
+          description: def.description || null,
+          icon: def.icon || null,
+          type: def.type || null,
+          section: def.section || def.type || null,
+          currency: def.currency || 'money',
+          maxLevel: def.maxLevel,
+          level,
+          cost: preview.cost,
+          costDecimal: preview.costDecimal,
+          available: preview.reason !== 'gated' && preview.reason !== 'requires' && preview.reason !== 'unknown',
+          canPurchase: false,
+          reason: preview.reason,
+          effect: def.effect,
+          cellType: def.cellType || null,
+          partId: def.partId || null,
+        };
+      });
+    },
+
     getCost(id) {
       return toNumber(computeCost(upgradeMap.get(id), store.getLevel(id)));
     },

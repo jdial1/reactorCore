@@ -82,9 +82,15 @@ export function createRevivalEconomy(manifest) {
 
       const autoSellEnabled = ctx.session ? !!ctx.session.toggles?.auto_sell : true;
       const overrides = ctx.session?.mechanicsOverrides ?? {};
-      const autoSellPercent = toNumber(overrides.autoSellPercent
-        ?? (upgrades?.getAutoSellPercent() || 0));
-      const sellPriceMultiplier = toNumber(overrides.sellPriceMultiplier) || 1;
+      const mods = ctx.session?.modifiers || {};
+      const autoSellPercent = toNumber(
+        overrides.autoSellPercent
+        ?? mods.autoSellPercent
+        ?? (upgrades?.getAutoSellPercent() || 0),
+      );
+      const sellPriceMultiplier = toNumber(
+        overrides.sellPriceMultiplier ?? mods.sellPriceMultiplier,
+      ) || 1;
       const sellCapBase = toNumber(overrides.alteredMaxPower) || grid.maxPower || 0;
 
       if (autoSellEnabled && autoSellPercent > 0 && grid.currentPower > 0) {

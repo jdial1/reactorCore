@@ -10,6 +10,7 @@ import { createCommandBus, registerCommand } from '../systems/commands.js';
 import { createEventQueue } from '../systems/events.js';
 import { createOffline } from '../systems/automation.js';
 import { toNumber } from '../systems/decimal.js';
+import { compileMechanicsOverrides, CORE_MECHANICS_OVERRIDE_KEYS } from '../systems/mechanicsPolicy.js';
 
 const RULESET_MODULES = {
   ic2_reactor_planner_v3: () => import('../../games/ic2_reactor_planner_v3/ruleset.js'),
@@ -167,36 +168,30 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
   let mechanicsOverrides = {};
 
   function syncMechanicsOverrides(mods) {
-    const perpetualPartIds = new Set(Object.keys(mods.perpetualPartIds || {}));
+    const hostExtras = {};
+    for (const [key, value] of Object.entries(mechanicsOverrides)) {
+      if (!CORE_MECHANICS_OVERRIDE_KEYS.has(key)) hostExtras[key] = value;
+    }
     mechanicsOverrides = {
-      ...mechanicsOverrides,
-      perpetualCategories: { ...(mods.perpetualCategories || {}) },
-      perpetualPartIds,
-      reflectorCoolingFactor: mods.reflectorCoolingFactor || 0,
-      stirlingMultiplier: mods.stirlingMultiplier || 0,
-      convectiveBoost: mods.convectiveBoost || 0,
-      heatPowerMultiplier: mods.heatPowerMultiplier || 0,
-      powerToHeatRatio: mods.powerToHeatRatio || 0,
-      manualVentMultiplier: mods.manualVentMultiplier || 1,
-      manualVentPercent: mods.manualVentPercent || 0,
-      autoSellFromUpgrade: !!mods.autoSellFromUpgrade,
-      autoBuyFromUpgrade: !!mods.autoBuyFromUpgrade,
-      heatControlled: !!mods.heatControlled,
-      heatOutletControlled: !!mods.heatOutletControlled,
+      ...hostExtras,
+      ...compileMechanicsOverrides(manifest, mods, {
+        alteredMaxPower: grid.maxPower || 0,
+      }),
     };
   }
 
   function recompileModifiers() {
     modifiers = systems.upgrades?.compileModifiers() || {};
-    syncMechanicsOverrides(modifiers);
     const definitions = buildDefinitionsFromManifest(manifest, modifiers);
     registry.registerAll(definitions);
     grid.recalculateCaps();
+    syncMechanicsOverrides(modifiers);
   }
 
-  syncMechanicsOverrides(modifiers);
   const definitions = buildDefinitionsFromManifest(manifest, modifiers);
   registry.registerAll(definitions);
+  grid.recalculateCaps();
+  syncMechanicsOverrides(modifiers);
 
   const customRunners = ruleset.createPhaseRunners?.(manifest);
   const engine = createTickEngine(grid, manifest, hooks, systems, { customRunners, ruleset });
@@ -244,6 +239,8 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     setPaused: (value) => { paused = !!value; toggles.pause = paused; },
     setCanPurchaseExtra: (fn) => systems.upgrades?.setCanPurchaseExtra?.(fn),
     previewUpgrade: (id) => systems.upgrades?.previewPurchase?.(id, systems.economy, session) ?? null,
+    listUpgrades: () => systems.upgrades?.listDisplayCatalog?.(session) ?? [],
+    isUpgradeAvailable: (id) => systems.upgrades?.isAvailable?.(id, session) ?? false,
     dispatch: (command) => commands.enqueue(command),
     drainEvents: () => events.drain(),
     recompileModifiers,

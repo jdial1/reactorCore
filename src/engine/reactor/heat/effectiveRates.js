@@ -27,6 +27,8 @@ export function computeGridMultiplierBonuses(grid, modifiers = {}) {
     + (transferPlating * platingLevels + transferCapacitor * capacitorLevels) / 100;
   const ventMultiplier = 1
     + (ventPlating * platingLevels + ventCapacitor * capacitorLevels) / 100;
+  const transferAdditivePercent = (transferMultiplier - 1) * 100;
+  const ventAdditivePercent = (ventMultiplier - 1) * 100;
   return Object.freeze({
     platingLevels,
     capacitorLevels,
@@ -34,6 +36,10 @@ export function computeGridMultiplierBonuses(grid, modifiers = {}) {
     ventMultiplier,
     transfer_multiplier_eff: transferMultiplier,
     vent_multiplier_eff: ventMultiplier,
+    transferAdditivePercent,
+    ventAdditivePercent,
+    transfer_multiplier_add: transferAdditivePercent,
+    vent_multiplier_add: ventAdditivePercent,
   });
 }
 

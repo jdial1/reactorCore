@@ -63,5 +63,14 @@ export function buildBehavior(spec, modifiers = {}) {
 }
 
 export function buildDefinitionsFromManifest(manifest, modifiers = {}) {
-  return manifest.components.map((spec) => buildBehavior(spec, modifiers));
+  return manifest.components.map((spec) => {
+    const def = buildBehavior(spec, modifiers);
+    if (spec.erequires == null && spec.currency == null && spec.ecost == null) return def;
+    return Object.freeze({
+      ...def,
+      erequires: spec.erequires ?? def.erequires ?? null,
+      currency: spec.currency ?? def.currency ?? null,
+      ecost: spec.ecost ?? def.ecost ?? null,
+    });
+  });
 }

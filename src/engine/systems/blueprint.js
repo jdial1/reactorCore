@@ -1,4 +1,5 @@
 import { toNum } from '../kernel/gridUtils.js';
+import { toDecimal, toNumber, getDecimalCtor } from './decimal.js';
 
 const DEFAULT_SELL_MULTIPLIER = 0.5;
 
@@ -34,13 +35,22 @@ export function layoutFromPlannerSlots(session, slots) {
   return layout;
 }
 
+function partUsesEp(def) {
+  return !!(def.erequires || def.currency === 'ep' || def.ecost != null);
+}
+
 function partCostForCell(def, cell, policy = {}) {
   if (!def) return { money: 0, ep: 0 };
+  if (policy.partCostForCell) return policy.partCostForCell(def, cell);
   const level = cell?.lvl || def.level || 1;
   const base = def.baseCost || 0;
-  const n = base * level;
-  if (policy.partCostForCell) return policy.partCostForCell(def, cell);
-  if (def.erequires || def.currency === 'ep') return { money: 0, ep: n };
+  let n;
+  if (getDecimalCtor()) {
+    n = toNumber(toDecimal(base).mul(level));
+  } else {
+    n = base * level;
+  }
+  if (partUsesEp(def)) return { money: 0, ep: n };
   return { money: n, ep: 0 };
 }
 

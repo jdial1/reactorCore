@@ -37,6 +37,7 @@ const REVIVAL_EFFECTS = {
   unleashed_cells: { effect: 'heat_multiplier', value: 2 },
   unstable_protium: { effect: 'unstable_protium' },
   isotope_stabilization: { effect: 'cell_ticks_global', value: 0.05 },
+  experimental_protium_loader: { effect: 'protium_loader' },
 };
 
 const CELL_TYPES = new Set([
@@ -64,6 +65,9 @@ function buildCellPowerUpgrades(components) {
       cellType,
       partId: part.id,
       value: 2,
+      type: 'cell_power',
+      icon: part.icon || null,
+      section: 'cell_power',
     });
   }
   return out;
@@ -85,6 +89,9 @@ function buildCellTickUpgrades(components) {
       cellType,
       partId: part.id,
       value: 2,
+      type: 'cell_tick',
+      icon: part.icon || null,
+      section: 'cell_tick',
     });
   }
   return out;
@@ -105,6 +112,9 @@ function buildCellPerpetualUpgrades(components) {
       cellType: part.type || 'cell',
       partId: part.id,
       value: 1,
+      type: 'cell_perpetual',
+      icon: part.icon || null,
+      section: 'cell_perpetual',
     });
   }
   return out;
@@ -134,6 +144,7 @@ export function createRevivalUpgradeStore(manifest, options = {}) {
     return {
       id: u.id,
       title: u.title,
+      description: u.description || null,
       baseCost: u.ecost != null ? u.ecost : u.cost,
       costMultiplier: u.multiplier ?? 2,
       maxLevel: u.levels ?? null,
@@ -142,7 +153,9 @@ export function createRevivalUpgradeStore(manifest, options = {}) {
       effect: mapped.effect || u.actionId || 'custom',
       value: mapped.value ?? 1,
       category: mapped.category,
-      type: u.type,
+      type: u.type || null,
+      icon: u.icon || null,
+      section: u.type || null,
     };
   });
 

@@ -19,18 +19,31 @@ Install alongside this package:
 npm install reactor-core-lib decimal.js
 ```
 
+## Host cutover notes (1.2.1)
+
+**Mechanics overrides** — `recompileModifiers` owns `session.mechanicsOverrides` for: perpetual ids/categories, `hasProtiumLoader`, `autoReplaceCosts`, `sellPriceMultiplier`, `autoSellPercent`, `alteredMaxPower` (from `grid.maxPower`), `powerOverflowToHeatRatio` (from manifest economy). Hosts should stop merging a sidecar object for those keys.
+
+**Upgrade UI** — Prefer `session.listUpgrades()` / `upgrades.listDisplayCatalog()` for title/icon/section/type metadata and `session.previewUpgrade(id)` / `session.isUpgradeAvailable(id)` for cost + gating. A thin host presentation catalog synced by id/level from `store.serialize()` is still fine.
+
+**Tooltip / placement preview** — Call `computeNeighborPulseN`, `resolveCellCoefficients`, and `computeCellOutput` from this package; keep string formatting local.
+
+**Blueprint paste** — Route paste/commit/cost UI through `APPLY_BLUEPRINT` / `COMMIT_BLUEPRINT_PLANNER` and `computeBlueprintCostBreakdown` / `computeBlueprintDiff`.
+
+**Tile vent/transfer display** — Stats expose full multipliers (`vent_multiplier_eff` / `transfer_multiplier_eff`) and additive percents (`vent_multiplier_add` / `transfer_multiplier_add` = `(mult - 1) * 100`) for older tile getters.
+
 ## Changelog
 
 ### 1.2.1
 
-Host cutover leftovers (formerly unlogged 1.2.0 surface):
+Host cutover leftovers (formerly unlogged 1.2.0 surface) plus follow-up override/catalog polish:
 
 - Tech-tree purchase gating via `createTechTreePurchaseGate` / `session.setCanPurchaseExtra`
-- In-core effective vent/transfer from defs + modifiers + plating/capacitor grid bonuses (`computeGridMultiplierBonuses`, `resolveVentRate`, `resolveTransferRate`)
-- Stats expose `vent_multiplier_eff` / `transfer_multiplier_eff`; heat/vent pipelines consume the same bonuses
-- Full cell upgrade catalog: `cell_tick` / `cell_perpetual` generation + effect handlers; `previewPurchase` / `session.previewUpgrade` / `getCostDecimal`
-- `heatPowerMultiplier` applied in `runCellPhase` / `cellOutputs`
-- `recompileModifiers` syncs `session.mechanicsOverrides` (perpetual ids/categories, stirling, convective, heat-power, etc.)
+- In-core effective vent/transfer from defs + modifiers + plating/capacitor grid bonuses
+- Stats expose full and additive vent/transfer multipliers
+- Full cell upgrade catalog (`cell_tick` / `cell_perpetual`) + `previewPurchase` / `listUpgrades` / `isUpgradeAvailable`
+- `heatPowerMultiplier` on `runCellPhase` / `cellOutputs`
+- Core-owned `mechanicsOverrides` sync: protium loader, auto-replace costs, sell price, auto-sell %, altered max power, overflow ratio
+- Blueprint part costs honor `erequires` / Decimal when available
 
 ### 1.1.0
 

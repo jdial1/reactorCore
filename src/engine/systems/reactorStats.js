@@ -123,6 +123,10 @@ export function deriveReactorStats(grid, modifiers = {}, options = {}) {
     ventMultiplier: bonuses.ventMultiplier,
     transfer_multiplier_eff: bonuses.transferMultiplier,
     vent_multiplier_eff: bonuses.ventMultiplier,
+    transferAdditivePercent: bonuses.transferAdditivePercent,
+    ventAdditivePercent: bonuses.ventAdditivePercent,
+    transfer_multiplier_add: bonuses.transferAdditivePercent,
+    vent_multiplier_add: bonuses.ventAdditivePercent,
     platingLevels: bonuses.platingLevels,
     capacitorLevels: bonuses.capacitorLevels,
   });

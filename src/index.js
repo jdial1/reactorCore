@@ -10,6 +10,7 @@ export { buildBehavior, buildDefinitionsFromManifest } from './engine/reactor/be
 export { createInstance, cloneInstance, preTick, isBroken } from './engine/reactor/createInstance.js';
 export { createEconomy } from './engine/systems/economy.js';
 export { createUpgradeStore } from './engine/systems/upgrades.js';
+export { compileMechanicsOverrides, buildAutoReplaceCosts } from './engine/systems/mechanicsPolicy.js';
 export { createAutomation, createOffline } from './engine/systems/automation.js';
 export { serializeSession, deserializeSession } from './engine/systems/codecs.js';
 export { createSaveCodec } from './engine/systems/save.js';

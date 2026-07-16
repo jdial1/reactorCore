@@ -37,6 +37,10 @@ export function createBaseModifiers() {
     autoSellFromUpgrade: false,
     autoBuyFromUpgrade: false,
     experimentalUnlocked: false,
+    hasProtiumLoader: false,
+    sellPriceMultiplier: 1,
+    powerOverflowToHeatRatio: null,
+    alteredMaxPower: 0,
     perpetualCategories: {},
     perpetualPartIds: {},
     cellPowerByType: {},
@@ -159,6 +163,17 @@ export const EFFECT_HANDLERS = {
   },
   unlock_experimental(mods, def, level) {
     mods.experimentalUnlocked = level > 0;
+  },
+  protium_loader(mods, def, level) {
+    mods.hasProtiumLoader = level > 0;
+  },
+  sell_price_multiplier(mods, def, level) {
+    if (level <= 0) return;
+    mods.sellPriceMultiplier *= Math.pow(def.value || 1, level);
+  },
+  power_overflow_ratio(mods, def, level) {
+    if (level <= 0) return;
+    mods.powerOverflowToHeatRatio = def.value ?? 1;
   },
   cell_power(mods, def, level) {
     const cellType = def.cellType || def.partType;

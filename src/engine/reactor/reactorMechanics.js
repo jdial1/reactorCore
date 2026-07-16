@@ -18,7 +18,11 @@ function effectiveMaxPower(grid, overrides) {
 
 export function applyPowerOverflowToCurrent(grid, overrides = {}) {
   const cap = effectiveMaxPower(grid, overrides);
-  const ratio = toNum(overrides.powerOverflowToHeatRatio ?? 1);
+  const ratio = toNum(
+    overrides.powerOverflowToHeatRatio
+    ?? overrides.power_overflow_to_heat_ratio
+    ?? 1,
+  );
   if (grid.currentPower > cap) {
     grid.adjustCurrentHeat((grid.currentPower - cap) * ratio);
     grid.currentPower = cap;
@@ -72,7 +76,14 @@ export function applyHeatReductions(ctx) {
 }
 
 export function runReactorMechanicsPhase(ctx) {
-  const overrides = ctx.session?.mechanicsOverrides ?? {};
+  const overrides = {
+    ...(ctx.session?.modifiers || {}),
+    ...(ctx.session?.mechanicsOverrides ?? {}),
+  };
+  if (!overrides.alteredMaxPower) overrides.alteredMaxPower = ctx.grid.maxPower;
+  if (overrides.powerOverflowToHeatRatio == null) {
+    overrides.powerOverflowToHeatRatio = ctx.manifest?.mechanics?.economy?.powerOverflowToHeatRatio ?? 1;
+  }
   applyPowerOverflowToCurrent(ctx.grid, overrides);
   applyPowerMultiplier(ctx.grid, ctx.result.powerOutput ?? 0, overrides);
   applyHeatReductions(ctx);
