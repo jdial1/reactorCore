@@ -27,6 +27,11 @@ export function buildCheckValve(spec) {
 function buildValve(spec, valveKind) {
   const { id, title, baseTransfer = 0, level = 1 } = spec;
   const orientation = level;
+  const rawTransfer = baseTransfer || spec.transfer || 0;
+  const transferMultiplier = Number(spec.transfer_multiplier) > 0
+    ? Number(spec.transfer_multiplier)
+    : 1;
+  const transfer = rawTransfer * transferMultiplier;
   return createDef({
     id,
     name: id,
@@ -36,12 +41,14 @@ function buildValve(spec, valveKind) {
     valveKind,
     valveGroup: spec.valve_group ?? valveKind,
     orientation,
-    transfer: baseTransfer || spec.transfer || 0,
+    baseTransfer: rawTransfer,
+    transfer,
+    transferRate: transfer,
     containment: 0,
     maxHeat: 0,
     activationThreshold: spec.activation_threshold ?? null,
     transferDirection: spec.transfer_direction ?? null,
-    transferMultiplier: spec.transfer_multiplier ?? 1,
+    transferMultiplier,
     isValve: true,
   });
 }

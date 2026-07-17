@@ -97,8 +97,15 @@ export function projectCompiledPart(def, raw = null, options = {}) {
     transfer: (typeof def.transferRate === 'number' ? def.transferRate : null)
       ?? (typeof def.transfer === 'number' ? def.transfer : null)
       ?? src.transfer ?? src.baseTransfer ?? 0,
+    transferMultiplier: def.transferMultiplier
+      ?? (Number(src.transfer_multiplier) > 0 ? Number(src.transfer_multiplier) : null)
+      ?? null,
     powerIncrease: def.powerIncrease ?? src.powerIncrease ?? 0,
     heatIncrease: def.heatIncrease ?? src.heatIncrease ?? 0,
+    neighborPulseValue: def.neighborPulseValue
+      ?? ((def.category || src.category) === 'reflector'
+        ? Math.max(0, 1 + ((def.powerIncrease ?? src.powerIncrease ?? 0) || 0) / 100)
+        : null),
     maxHeat: def.maxHeat ?? null,
     cellCount: def.cellCount ?? src.cellCount ?? null,
     cellMultiplier: def.cellMultiplier ?? src.cellMultiplier ?? null,

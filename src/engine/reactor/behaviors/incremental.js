@@ -124,11 +124,12 @@ export function buildIncrementalReflector(spec, modifiers = {}) {
     * (1 + powerPercent)
     * legacyPowerMult
     + basePowerIncrease * powerBonusLevels;
+  const neighborPulseValue = Math.max(0, 1 + (powerIncrease || 0) / 100);
   const tickLife = Math.max(1, Math.floor(baseTicks));
   return createDef({
     id, name: id, title, category: category || 'reflector', displayName: title,
     maxHeat: 1, maxDamage: tickLife, baseTicks, baseCost,
-    pulseMultiplier: 1, powerIncrease, heatIncrease,
+    pulseMultiplier: 1, powerIncrease, heatIncrease, neighborPulseValue,
     isNeutronReflector: (inst) => !isBroken(inst) && inst.ticks > 0,
     generateHeat(instance, grid, row, col) {
       if (instance.ticks > 0) {

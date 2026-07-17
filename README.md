@@ -416,7 +416,23 @@ entry.title;        // "Auto-Sell Operator"
 
 `auto_buy_operator` → `Supply Chain Logistics`. Host can drop `OPERATOR_HOST_TITLES` and use `displayTitle || title`.
 
+### Valve / reflector catalog bake (1.2.12 — adopt)
+
+```js
+session.getPart('overflow_valve').transfer; // baseTransfer × transferMultiplier (e.g. 1000×2.5)
+session.getPart('reflector1').neighborPulseValue; // 1 + powerIncrease/100
+```
+
+Host can drop the valve multiply in `applyCompiledCatalogPart`. `transferMultiplier` remains on the compiled entry for display/debug.
+
 ## Changelog
+
+### 1.2.12
+
+Compiled catalog bake:
+
+- Valve `transfer` includes part `transferMultiplier` (runtime def + `listParts`/`getPart`)
+- Reflector `neighborPulseValue` on compiled parts / defs
 
 ### 1.2.11
 

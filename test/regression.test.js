@@ -943,3 +943,29 @@ test('listUpgrades ships operator displayTitle for host UI', async () => {
   const vents = catalog.find((u) => u.id === 'improved_heat_vents');
   assert.equal(vents.displayTitle, vents.title);
 });
+
+test('compiled valve transfer bakes transferMultiplier', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const overflow = session.getPart('overflow_valve');
+  assert.equal(overflow.transferMultiplier, 2.5);
+  assert.equal(overflow.transfer, 1000 * 2.5);
+  assert.equal(overflow.definition.transfer, 2500);
+  assert.equal(overflow.definition.baseTransfer, 1000);
+  const check = session.getPart('check_valve');
+  assert.equal(check.transfer, 1200 * 2.5);
+});
+
+test('compiled reflector exposes neighborPulseValue', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const reflector = session.getPart('reflector1');
+  assert.equal(
+    reflector.neighborPulseValue,
+    Math.max(0, 1 + (reflector.powerIncrease || 0) / 100),
+  );
+  assert.equal(reflector.definition.neighborPulseValue, reflector.neighborPulseValue);
+  session.systems.economy.addMoney(1_000_000);
+  assert.equal(session.purchaseUpgrade('improved_neutron_reflection'), true);
+  const next = session.getPart('reflector1');
+  assert.equal(next.neighborPulseValue, Math.max(0, 1 + (next.powerIncrease || 0) / 100));
+  assert.ok(next.neighborPulseValue > reflector.neighborPulseValue);
+});
