@@ -799,11 +799,38 @@ test('economy intents own money mutations and emit economyChanged', async () => 
 test('grantReward and GRANT_REWARD credit money/EP', async () => {
   const session = await createGameSession({ gameId: 'reactor_revival' });
   const before = toNumber(session.systems.economy.money);
-  assert.deepEqual(session.grantReward({ money: 10 }), { ok: true, money: 10, ep: 0 });
+  assert.deepEqual(session.grantReward({ money: 10 }), {
+    ok: true,
+    money: 10,
+    baseMoney: 10,
+    ep: 0,
+    prestigeMultiplier: 1,
+    applyPrestige: false,
+  });
   assert.equal(toNumber(session.systems.economy.money), before + 10);
   session.dispatch({ type: 'GRANT_REWARD', payload: { ep: 3 } });
   session.tick();
   assert.equal(toNumber(session.systems.economy.currentExoticParticles), 3);
+});
+
+test('creditMoney applyPrestige uses session prestige multiplier', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  session.systems.economy.addExoticParticles(1000);
+  const mult = session.getPrestigeMultiplier();
+  assert.ok(mult > 1);
+  assert.equal(mult, session.systems.economy.getPrestigeMultiplier());
+  const before = toNumber(session.systems.economy.money);
+  assert.equal(session.creditMoney(100, { applyPrestige: true }), true);
+  assert.equal(toNumber(session.systems.economy.money), before + (100 * mult));
+  const mid = toNumber(session.systems.economy.money);
+  const granted = session.grantReward({ money: 50, applyPrestige: true });
+  assert.equal(granted.ok, true);
+  assert.equal(granted.baseMoney, 50);
+  assert.equal(granted.prestigeMultiplier, mult);
+  assert.equal(granted.money, 50 * mult);
+  assert.equal(toNumber(session.systems.economy.money), mid + (50 * mult));
+  assert.equal(session.creditMoney(10), true);
+  assert.equal(toNumber(session.systems.economy.money), mid + (50 * mult) + 10);
 });
 
 test('objective completion grants reward via session economy', async () => {

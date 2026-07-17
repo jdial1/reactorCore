@@ -335,6 +335,17 @@ session.loadEconomyState(data); // load/save ONLY — never each tick
 
 **Delete** host `syncEconomyFromGame` / per-tick `economy.deserialize`, `rewards.js` Decimal writers, and prestige host EP credits (`session.prestige()` owns weave EP). Listen for `economyChanged` / `rewardGranted` or read `getSnapshot().economy`.
 
+### Prestige multiplier on credit (1.2.11 — adopt)
+
+```js
+session.getPrestigeMultiplier(); // 1 + min(totalEP * perEp, cap)
+session.creditMoney(amount, { applyPrestige: true }); // game.addMoney path
+session.grantReward({ money, ep, applyPrestige: true });
+session.dispatch({ type: 'CREDIT_MONEY', payload: { amount, applyPrestige: true } });
+```
+
+Session applies the EP money multiplier — host must **not** multiply before credit. Drop bridge `getPrestigeMultiplier()` multiply-before-credit; UI can still read `session.getPrestigeMultiplier()` for display.
+
 ### Upgrade UI source (L17)
 
 ```js
@@ -406,6 +417,14 @@ entry.title;        // "Auto-Sell Operator"
 `auto_buy_operator` → `Supply Chain Logistics`. Host can drop `OPERATOR_HOST_TITLES` and use `displayTitle || title`.
 
 ## Changelog
+
+### 1.2.11
+
+Economy prestige multiplier ownership:
+
+- `session.getPrestigeMultiplier()`
+- `creditMoney` / `grantReward` / `CREDIT_MONEY` accept `{ applyPrestige: true }`
+- Host drops multiply-before-credit via `game.getPrestigeMultiplier`
 
 ### 1.2.10
 

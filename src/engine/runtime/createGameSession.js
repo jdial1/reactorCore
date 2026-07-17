@@ -178,7 +178,8 @@ function registerDefaultCommands() {
     return sellValue;
   });
   registerCommand('DEBIT_MONEY', (session, { amount }) => session.debitMoney?.(amount) ?? false);
-  registerCommand('CREDIT_MONEY', (session, { amount }) => session.creditMoney?.(amount) ?? false);
+  registerCommand('CREDIT_MONEY', (session, { amount, applyPrestige } = {}) =>
+    session.creditMoney?.(amount, { applyPrestige }) ?? false);
   registerCommand('DEBIT_EP', (session, { amount }) => session.debitExoticParticles?.(amount) ?? false);
   registerCommand('CREDIT_EP', (session, { amount }) => session.creditExoticParticles?.(amount) ?? false);
   registerCommand('GRANT_REWARD', (session, payload = {}) => session.grantReward?.(payload) ?? false);
@@ -368,16 +369,29 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
     refreshCellOutputs,
     hasTickActivity,
     describeCellPulse: (row, col) => describeCellPulse(grid, row, col),
+    getPrestigeMultiplier() {
+      return systems.economy?.getPrestigeMultiplier?.() ?? 1;
+    },
     debitMoney(amount) {
       if (!systems.economy) return false;
       const ok = systems.economy.spendMoney(amount);
       if (ok) emitEconomyChanged('debit_money', { amount: toNumber(amount) });
       return ok;
     },
-    creditMoney(amount) {
+    creditMoney(amount, options = {}) {
       if (!systems.economy) return false;
-      systems.economy.addMoney(amount);
-      emitEconomyChanged('credit_money', { amount: toNumber(amount) });
+      const baseAmount = toNumber(amount);
+      if (!(baseAmount > 0)) return false;
+      const applyPrestige = !!options.applyPrestige;
+      const prestigeMultiplier = applyPrestige ? session.getPrestigeMultiplier() : 1;
+      const credited = baseAmount * prestigeMultiplier;
+      systems.economy.addMoney(credited);
+      emitEconomyChanged('credit_money', {
+        amount: credited,
+        baseAmount,
+        prestigeMultiplier,
+        applyPrestige,
+      });
       return true;
     },
     debitExoticParticles(amount) {
@@ -404,11 +418,35 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
             : 0,
       );
       if (!(moneyAmt > 0) && !(epAmt > 0)) return false;
-      if (moneyAmt > 0) session.creditMoney(moneyAmt);
+      const applyPrestige = !!payload.applyPrestige;
+      const prestigeMultiplier = applyPrestige && moneyAmt > 0
+        ? session.getPrestigeMultiplier()
+        : 1;
+      const creditedMoney = moneyAmt > 0 ? moneyAmt * prestigeMultiplier : 0;
+      if (creditedMoney > 0) session.creditMoney(creditedMoney);
       if (epAmt > 0) session.creditExoticParticles(epAmt);
-      events.emit('rewardGranted', { money: moneyAmt, ep: epAmt });
-      emitEconomyChanged('grant_reward', { money: moneyAmt, ep: epAmt });
-      return { ok: true, money: moneyAmt, ep: epAmt };
+      events.emit('rewardGranted', {
+        money: creditedMoney,
+        baseMoney: moneyAmt,
+        ep: epAmt,
+        prestigeMultiplier,
+        applyPrestige,
+      });
+      emitEconomyChanged('grant_reward', {
+        money: creditedMoney,
+        baseMoney: moneyAmt,
+        ep: epAmt,
+        prestigeMultiplier,
+        applyPrestige,
+      });
+      return {
+        ok: true,
+        money: creditedMoney,
+        baseMoney: moneyAmt,
+        ep: epAmt,
+        prestigeMultiplier,
+        applyPrestige,
+      };
     },
     getEconomySnapshot() {
       return systems.economy?.serialize?.() ?? null;
