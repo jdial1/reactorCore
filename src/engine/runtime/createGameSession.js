@@ -38,6 +38,7 @@ import {
   clearPlacedCounts,
 } from '../systems/placedCounts.js';
 import { deriveActiveParts, getActivePartList, classifyActivePart } from '../systems/activeParts.js';
+import { queryNeighbors, countNeighborCategoryLevels } from '../systems/neighborQuery.js';
 import { runBatchTicks } from './runBatchTicks.js';
 import { projectCellOutputs, describeCellPulse } from '../reactor/phases/cellPhase.js';
 
@@ -523,6 +524,9 @@ export async function createGameSession({ gameId, manifest: providedManifest, ru
       const inst = grid.getComponentAt(row, col);
       return classifyActivePart(inst, { row, col, grid });
     },
+    queryNeighbors: (row, col, options) => queryNeighbors(grid, row, col, options),
+    countNeighborCategoryLevels: (row, col, category, options) =>
+      countNeighborCategoryLevels(grid, row, col, category, options),
     drainEvents: () => events.drain(),
     recompileModifiers,
     sellValuePolicy: null,

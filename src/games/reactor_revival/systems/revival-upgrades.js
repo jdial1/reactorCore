@@ -150,6 +150,7 @@ function mapRevivalUpgrade(u) {
   return {
     id: u.id,
     title: u.title,
+    displayTitle: u.displayTitle || u.title,
     description: u.description || null,
     baseCost: u.ecost != null ? u.ecost : u.cost,
     costMultiplier: u.multiplier ?? 2,

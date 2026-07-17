@@ -887,3 +887,32 @@ test('getActiveParts classifies grid components by category', async () => {
   assert.equal(session.classifyActivePart(0, 0).cells, true);
   assert.equal(session.getActivePartList('active_vents').length, 1);
 });
+
+test('queryNeighbors returns containment/cell/reflector tooltip buckets', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  assert.equal(session.placeComponent(1, 1, 'vent1'), true);
+  assert.equal(session.placeComponent(1, 2, 'capacitor1'), true);
+  assert.equal(session.placeComponent(1, 0, 'uranium1'), true);
+  assert.equal(session.placeComponent(0, 1, 'reflector1'), true);
+  assert.equal(session.placeComponent(2, 1, 'heat_exchanger1'), true);
+  const neighbors = session.queryNeighbors(1, 1);
+  assert.ok(neighbors.containment.some((n) => n.id === 'capacitor1'));
+  assert.ok(neighbors.containment.some((n) => n.id === 'heat_exchanger1'));
+  assert.ok(neighbors.cell.some((n) => n.id === 'uranium1'));
+  assert.ok(neighbors.reflector.some((n) => n.id === 'reflector1'));
+  assert.equal(session.countNeighborCategoryLevels(1, 1, 'capacitor'), 1);
+  assert.deepEqual(session.queryNeighbors(5, 5), { containment: [], cell: [], reflector: [] });
+});
+
+test('listUpgrades ships operator displayTitle for host UI', async () => {
+  const session = await createGameSession({ gameId: 'reactor_revival' });
+  const catalog = session.listUpgrades();
+  const sell = catalog.find((u) => u.id === 'auto_sell_operator');
+  const buy = catalog.find((u) => u.id === 'auto_buy_operator');
+  assert.equal(sell.title, 'Auto-Sell Operator');
+  assert.equal(sell.displayTitle, 'Power Grid Sync');
+  assert.equal(buy.title, 'Auto-Buy Operator');
+  assert.equal(buy.displayTitle, 'Supply Chain Logistics');
+  const vents = catalog.find((u) => u.id === 'improved_heat_vents');
+  assert.equal(vents.displayTitle, vents.title);
+});

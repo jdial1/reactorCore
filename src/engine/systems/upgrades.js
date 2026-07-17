@@ -134,9 +134,11 @@ export function createUpgradeStore(manifest, options = {}) {
           perpetual: !!(compiled?.perpetual),
         } : null;
         const classList = buildClassList(def, { available, maxed, visible });
+        const title = def.title || def.id;
         return {
           id: def.id,
-          title: def.title || def.id,
+          title,
+          displayTitle: def.displayTitle || title,
           description: def.description || null,
           icon: def.icon || partRef?.icon || null,
           iconPath: def.icon || partRef?.icon || null,

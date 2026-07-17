@@ -31,6 +31,10 @@ export {
   getActivePartList,
   classifyActivePart,
 } from './engine/systems/activeParts.js';
+export {
+  queryNeighbors,
+  countNeighborCategoryLevels,
+} from './engine/systems/neighborQuery.js';
 export { createEventQueue } from './engine/systems/events.js';
 export { toDecimal, toNumber, serializeDecimal, deserializeDecimal } from './engine/systems/decimal.js';
 export { toNum, isValidGridCoord, countById, neighborInstances, createSustainedTracker, CARDINAL_OFFSETS } from './engine/kernel/gridUtils.js';

@@ -385,7 +385,34 @@ session.classifyActivePart(row, col);
 
 Entries are `{ row, col, id, type, level, category, ticks, … }` (not host Tile objects). Drop `bridge-parts` / `Engine.active_*` rebuilds for sim queries.
 
+### Neighbor topology for tooltips (1.2.10 — adopt)
+
+```js
+const { containment, cell, reflector } = session.queryNeighbors(row, col);
+// optional overrides: { range, topologyType }
+session.countNeighborCategoryLevels(row, col, 'capacitor'); // active_venting tooltip
+```
+
+Matches host `computeTileNeighborLists` buckets (activated neighbors in part range/topology). Drop tooltip use of `tile.containmentNeighborTiles` / `computeTileNeighborLists` when ready.
+
+### Operator display titles (1.2.10 — adopt)
+
+```js
+const entry = session.listUpgrades().find((u) => u.id === 'auto_sell_operator');
+entry.displayTitle; // "Power Grid Sync"
+entry.title;        // "Auto-Sell Operator"
+```
+
+`auto_buy_operator` → `Supply Chain Logistics`. Host can drop `OPERATOR_HOST_TITLES` and use `displayTitle || title`.
+
 ## Changelog
+
+### 1.2.10
+
+Tooltip neighbors + operator display titles:
+
+- `session.queryNeighbors(row,col)` / `countNeighborCategoryLevels` — containment/cell/reflector lists for tooltips
+- `listUpgrades[].displayTitle` for `auto_sell_operator` / `auto_buy_operator` host UI names
 
 ### 1.2.9
 
